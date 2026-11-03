@@ -6,10 +6,16 @@ import { cleanParts, cleanBlocks } from './lib/block-model.js';
 import { blacklistSite, blockingSite, changeBlacklist, domainMatches } from './lib/site-policy.js';
 import { createContextMenus } from './lib/context-menu.js';
 import { cleanPageInfo, cleanPageBlocks } from './lib/page-cache.js';
+import { createSummaryManager } from './lib/summary-manager.js';
+import { cleanSummaryProfile } from './lib/summary-presets.js';
+import { runSummaryModel } from './lib/summary-model.js';
+import { runConnections } from './lib/connections.js';
+import { connectionPermission, nativeCodex } from './lib/codex.js';
 
 const pending = new Map();
+const backupNotices = new Set();
 const contentFiles = ['lib/text.js', 'lib/block-text.js', 'lib/page-map.js', 'content/inline-structure.js', 'content/companion.js', 'content/reader.js', 'content/content.js'];
-const uiPaths = new Set(['popup.html', 'options.html']);
+const uiPaths = new Set(['popup.html', 'options.html', 'summary.html']);
 function trusted(sender) {
   if (sender.id !== chrome.runtime.id || sender.tab?.url && !sender.url?.startsWith(chrome.runtime.getURL(''))) return false;
   try { const url = new URL(sender.url); return url.origin === new URL(chrome.runtime.getURL('')).origin && uiPaths.has(url.pathname.slice(1)); } catch { return false; }
@@ -25,6 +31,19 @@ async function pageIdentity(sender, value, requestedURL) {
 }
 
 async function permissionGranted(origin) { return chrome.permissions.contains({ origins: [permissionPattern(origin)] }); }
+async function resolveConnection(profile, purpose = 'translation') {
+  const connection = purpose === 'summary' ? await settings.resolveSummaryProfile(profile) : await settings.resolveProfile(profile);
+  assert(await connectionPermission(profile), profile.provider === 'codex' ? 'CODEX_PERMISSION' : 'MODEL_PERMISSION', profile.provider === 'codex' ? '请在模型连接中允许点译连接本机 Codex。' : '模型服务权限已失效，请到模型连接中重新授权。');
+  return connection;
+}
+const translateConnected = (value, args) => runConnections({ value, purpose: 'translation', resolve: profile => resolveConnection(profile), run: connection => callModel({ ...args, ...connection }), signal: args.signal });
+function reportBackup(sender, result) {
+  if (!result?.backup) return;
+  const key = `${sender.tab.id}:${sender.documentId}:${result.profile.connectionId}`;
+  if (backupNotices.has(key)) return;
+  backupNotices.add(key); if (backupNotices.size > 200) backupNotices.delete(backupNotices.values().next().value);
+  chrome.tabs.sendMessage(sender.tab.id, { type: 'SHIYI/NOTICE', text: `本次翻译已使用备用连接：${result.profile.name}` }, { documentId: sender.documentId }).catch(() => {});
+}
 async function enabledSender(sender, value) {
   if (sender.id !== chrome.runtime.id || !Number.isInteger(sender.tab?.id) || sender.frameId !== 0 || !sender.documentId) return false;
   if (sender.documentLifecycle && sender.documentLifecycle !== 'active') return false;
@@ -88,6 +107,7 @@ async function pageCommand(tabId, action, mode) {
 async function setSiteBlocked(input, blocked) {
   const site = blacklistSite(input);
   abortRequests(item => item.origin && domainMatches(new URL(item.origin).hostname, site));
+  if (blocked) summaries.cancelAll('网站黑名单已更新，生成已停止。请确认来源网站后重新总结。');
   await settings.changeConfig(value => { value.blacklist = changeBlacklist(value.blacklist, site, blocked); });
   await broadcast();
   if (!blocked) await injectExisting(site);
@@ -95,9 +115,14 @@ async function setSiteBlocked(input, blocked) {
   if (active) await menus.update(active.id).catch(() => {});
   return { blacklist: (await settings.config()).blacklist };
 }
+const summaries = createSummaryManager({ chromeApi: chrome, settings, tabState, permissionGranted: connectionPermission });
 const menus = createContextMenus(chrome, {
   state: async tabId => tabState(tabId, await settings.config()),
   settings: () => chrome.tabs.create({ url: chrome.runtime.getURL('options.html#model') }),
+  summary: tab => {
+    // Must run before any await: native sidePanel.open requires this gesture.
+    return chrome.sidePanel.open({ windowId: tab.windowId }).then(() => ready).then(() => summaries.start(tab.id));
+  },
   toggle: state => setSiteBlocked(state.blockingSite || state.origin, !state.blocked),
   selection: async (tabId, text) => {
     const message = { type: 'SHIYI/CONTEXT_TRANSLATE', text: boundedText(text, 16000, '选区') };
@@ -159,8 +184,7 @@ async function handle(message, sender) {
       if (found) return { entry: publicEntry(found), saved: true, reused: true };
       assert(value.profile.endpoint && value.profile.model, 'MODEL_NOT_CONFIGURED', '先配置你自己的翻译模型，再开始翻译。');
       const profile = cleanProfile(value.profile);
-      assert(await permissionGranted(profile.endpoint), 'MODEL_PERMISSION', '模型服务的访问权限已失效，请到模型连接中重新测试并授权。');
-      const apiKey = await settings.getSecret(profile), epoch = await store.getEpoch();
+      const epoch = await store.getEpoch();
       const context = value.prefs.includeContext ? boundedText(message.context || '', 1200, '相邻语境', { optional: true }) : '';
       const controller = new AbortController();
       pending.set(identity, { controller, tabId: sender.tab.id, documentId: sender.documentId, origin: pageOrigin(sender.url) });
@@ -168,15 +192,18 @@ async function handle(message, sender) {
         const prompt = value.prefs.style === 'custom' ? value.prefs.customPrompt : value.prefs.style;
         const cacheId = await digest(JSON.stringify([text, value.prefs.targetLanguage, value.prefs.style, prompt, profile.endpoint, profile.model, profile.provider, profile.region, context]));
         const cached = await store.cacheRead(cacheId);
-        const output = cached || await callModel({ profile, prefs: value.prefs, text, context, apiKey, signal: controller.signal });
+        const connected = cached ? null : await translateConnected(value, { prefs: value.prefs, text, context, signal: controller.signal });
+        const output = cached || connected.output;
+        const modelName = cached?.modelName || connected?.profile.name || profile.name || profile.model;
         assert(!controller.signal.aborted && await enabledSender(sender, await settings.config()), 'CANCELLED', '本次翻译已取消，或当前页面已经关闭。');
         // A real document-bound receiver must still exist for this document.
         await chrome.tabs.sendMessage(sender.tab.id, { type: 'SHIYI/PING' }, { documentId: sender.documentId }).catch(() => { throw new AppError('PAGE_CHANGED', '网页已经切换，请在当前页面重新选择。'); });
         const now = Date.now();
         const entry = await store.commitTranslation({ id: crypto.randomUUID(), text, ...output, targetLanguage: value.prefs.targetLanguage,
-          style: value.prefs.style, customPromptVersion: await digest(prompt), modelName: profile.name || profile.model,
+          style: value.prefs.style, customPromptVersion: await digest(prompt), modelName,
           source: safeSource(sender.url, message.title || ''), context, createdAt: now, updatedAt: now }, epoch);
-        if (!cached) await store.cacheWrite(cacheId, output, epoch).catch(() => {});
+        if (!cached) await store.cacheWrite(cacheId, { ...output, modelName }, epoch).catch(() => {});
+        reportBackup(sender, connected);
         await broadcast();
         return { entry: publicEntry(entry), saved: true, reused: !!cached };
       } finally { pending.delete(identity); }
@@ -190,11 +217,10 @@ async function handle(message, sender) {
       assert(!pending.has(identity), 'BUSY', '这些段落正在翻译。');
       assert(value.profile.endpoint && value.profile.model, 'MODEL_NOT_CONFIGURED', '请先连接翻译模型，再翻译页面。');
       const profile = cleanProfile(value.profile);
-      assert(await permissionGranted(profile.endpoint), 'MODEL_PERMISSION', '模型访问权限已失效，请在模型连接中重新授权。');
       const controller = new AbortController();
       pending.set(identity, { controller, tabId: sender.tab.id, documentId: sender.documentId, origin: pageOrigin(sender.url) });
       try {
-        const apiKey = await settings.getSecret(profile), epoch = await store.getEpoch();
+        const epoch = await store.getEpoch();
         const items = await Promise.all(blocks.map(async block => {
           // Keep the existing per-block cache identity across batch boundaries
           // and upgrades. Only cache misses are sent to the model.
@@ -202,12 +228,13 @@ async function handle(message, sender) {
           return { ...block, cacheId, cached: message.fresh === true ? null : await store.cacheRead(cacheId) };
         }));
         const missing = [...new Map(items.filter(item => !item.cached).map(item => [item.cacheId, item])).values()];
-        let results = [];
-        if (missing.length === 1) results = [{ id: missing[0].id, output: await callModel({ profile, prefs: value.prefs, parts: missing[0].parts, apiKey, signal: controller.signal }) }];
-        else if (missing.length > 1) ({ results } = await callModel({ profile, prefs: value.prefs, blocks: missing.map(({ id, parts }) => ({ id, parts })), apiKey, signal: controller.signal }));
+        let results = [], connected;
+        if (missing.length === 1) { connected = await translateConnected(value, { prefs: value.prefs, parts: missing[0].parts, signal: controller.signal }); results = [{ id: missing[0].id, output: connected.output }]; }
+        else if (missing.length > 1) { connected = await translateConnected(value, { prefs: value.prefs, blocks: missing.map(({ id, parts }) => ({ id, parts })), signal: controller.signal }); ({ results } = connected.output); }
         assert(!controller.signal.aborted && await enabledSender(sender, await settings.config()), 'CANCELLED', '本次段落翻译已取消。');
         await chrome.tabs.sendMessage(sender.tab.id, { type: 'SHIYI/PING' }, { documentId: sender.documentId }).catch(() => { throw new AppError('PAGE_CHANGED', '页面已切换，请重新翻译。'); });
         const byId = new Map(results.map(result => [result.id, result]));
+        reportBackup(sender, connected);
         const byCache = new Map(missing.map(item => [item.cacheId, byId.get(item.id)]));
         await Promise.all(missing.map(item => {
           const result = byId.get(item.id);
@@ -270,7 +297,7 @@ async function handle(message, sender) {
     }
     case 'SHIYI/OPEN_OPTIONS': {
       if (!trusted(sender)) await requireContent(sender);
-      const section = ['library', 'translation', 'model', 'sites', 'data', 'help'].includes(message.section) ? message.section : 'library';
+      const section = ['library', 'translation', 'model', 'summary', 'sites', 'data', 'help', 'about'].includes(message.section) ? message.section : 'library';
       const query = typeof message.entryId === 'string' ? `?entry=${encodeURIComponent(message.entryId.slice(0, 80))}` : '';
       await chrome.tabs.create({ url: chrome.runtime.getURL(`options.html${query}#${section}`) }); return {};
     }
@@ -297,13 +324,40 @@ async function handle(message, sender) {
     }
     case 'SHIYI/SAVE_PROFILE': {
       uiOnly(sender); const profile = cleanProfile(message.profile);
-      assert(await permissionGranted(profile.endpoint), 'MODEL_PERMISSION', '请先允许访问这个模型服务地址。');
-      abortRequests(); await settings.saveProfile(profile, message.apiKey); await broadcast(); return {};
+      assert(await connectionPermission(profile), 'MODEL_PERMISSION', '请先允许访问这个模型连接。');
+      abortRequests(); const output = await settings.saveProfile(profile, message.apiKey, { ...(Object.hasOwn(message, 'connectionId') ? { id: message.connectionId } : {}), makeDefault: message.makeDefault === true }); await broadcast(); return output;
+    }
+    case 'SHIYI/CONNECTION_UPDATE': {
+      uiOnly(sender);
+      if (message.purpose === 'summary') summaries.cancelAll('总结连接已更新，请重新总结。'); else abortRequests();
+      await settings.updateConnection(message.purpose, boundedText(message.id, 80, '连接标识'), message.action, message.enabled);
+      await broadcast(); return {};
+    }
+    case 'SHIYI/CODEX_STATUS': {
+      uiOnly(sender); assert(await chrome.permissions.contains({ permissions: ['nativeMessaging'] }), 'CODEX_PERMISSION', '请先允许点译连接本机应用。');
+      return nativeCodex({ action: 'status' });
     }
     case 'SHIYI/CLEAR_KEY': uiOnly(sender); abortRequests(); await settings.clearCredential(); await broadcast(); return {};
+    case 'SHIYI/SUMMARY_START': uiOnly(sender); return summaries.start(message.tabId, message.preset);
+    case 'SHIYI/SUMMARY_STOP': uiOnly(sender); summaries.stop(message.tabId); return {};
+    case 'SHIYI/SAVE_SUMMARY_PREFS': uiOnly(sender); await settings.saveSummaryPrefs(message.prefs); await broadcast(); return {};
+    case 'SHIYI/SAVE_SUMMARY_PROFILE': {
+      uiOnly(sender); const profile = cleanSummaryProfile(message.profile);
+      assert(await connectionPermission(profile), 'MODEL_PERMISSION', '请先允许访问这个总结连接。');
+      summaries.cancelAll('总结模型已变更，旧任务已停止。');
+      const output = await settings.saveSummaryProfile(profile, message.apiKey, { ...(Object.hasOwn(message, 'connectionId') ? { id: message.connectionId } : {}), makeDefault: message.makeDefault === true }); await broadcast(); return output;
+    }
+    case 'SHIYI/CLEAR_SUMMARY_KEY': uiOnly(sender); summaries.cancelAll('总结密钥已清除，生成已停止。'); await settings.clearSummaryCredential(); await broadcast(); return {};
+    case 'SHIYI/TEST_SUMMARY_MODEL': {
+      uiOnly(sender); const connection = await settings.resolveSummaryProfile(message.profile, message.apiKey);
+      assert(await connectionPermission(connection.profile), 'MODEL_PERMISSION', '请先允许访问这个总结连接。');
+      const start = Date.now(); let output = '';
+      await runSummaryModel({ ...connection, text: '这是一段连接测试资料：浏览器插件支持在侧栏总结当前网页，结果以流式方式显示。请用一句话概括。', preset: 'general', onDelta: chunk => { output += chunk; } });
+      return { translation: output, elapsedMs: Date.now() - start, model: connection.profile.model };
+    }
     case 'SHIYI/TEST_MODEL': {
       uiOnly(sender); const { profile, apiKey } = await settings.resolveProfile(message.profile, message.apiKey);
-      assert(await permissionGranted(profile.endpoint), 'MODEL_PERMISSION', '请先允许访问这个模型服务地址。');
+      assert(await connectionPermission(profile), 'MODEL_PERMISSION', '请先允许访问这个模型连接。');
       const value = await settings.config(), start = Date.now();
       const output = await callModel({ profile, apiKey, prefs: { ...value.prefs, style: 'regular', includeContext: false }, text: 'curiosity' });
       return { translation: output.translation, elapsedMs: Date.now() - start, model: profile.model };
@@ -321,11 +375,21 @@ async function handle(message, sender) {
 }
 chrome.runtime.onMessage.addListener((message, sender, respond) => {
   if (!message?.type?.startsWith('SHIYI/') || message.type === 'SHIYI/UI_CHANGED') return false;
-  handle(message, sender).then(data => respond({ ok: true, data }), error => respond({ ok: false, error: friendlyError(error) }));
+  let task;
+  try {
+    if (message.type === 'SHIYI/SUMMARY_OPEN') {
+      uiOnly(sender); assert(Number.isInteger(message.tabId), 'INVALID_INPUT', '请选择需要总结的网页。');
+      // Opening a native panel closes Chrome's action popup. Own the entire
+      // open -> start chain here so destroying that popup cannot drop the job.
+      // This call must precede ready/other awaits to retain the click gesture.
+      task = chrome.sidePanel.open({ tabId: message.tabId }).then(() => ready).then(() => summaries.start(message.tabId, message.preset));
+    } else task = handle(message, sender);
+  } catch (error) { respond({ ok: false, error: friendlyError(error) }); return false; }
+  task.then(data => respond({ ok: true, data }), error => respond({ ok: false, error: friendlyError(error) }));
   return true;
 });
 chrome.contextMenus.onClicked.addListener((info, tab) => {
-  ready.then(() => menus.click(info, tab)).catch(async error => {
+  menus.click(info, tab).catch(async error => {
     if (Number.isInteger(tab?.id)) await chrome.tabs.sendMessage(tab.id, { type: 'SHIYI/NOTICE', text: friendlyError(error).message }, { frameId: 0 }).catch(() => {});
   });
 });
@@ -336,11 +400,16 @@ chrome.runtime.onInstalled.addListener(details => {
   }).catch(() => {});
 });
 chrome.runtime.onStartup.addListener(() => ready.then(syncScripts).catch(() => {}));
-chrome.permissions.onRemoved.addListener(() => ready.then(async () => { abortRequests(); await broadcast(); }).catch(() => {}));
+chrome.permissions.onRemoved.addListener(() => ready.then(async () => { abortRequests(); summaries.cancelAll('浏览器权限已变更，生成已停止。'); await broadcast(); }).catch(() => {}));
 chrome.permissions.onAdded.addListener(() => ready.then(async () => { await injectExisting(); await broadcast(); }).catch(() => {}));
 chrome.tabs.onActivated.addListener(({ tabId }) => ready.then(() => menus.update(tabId)).catch(() => {}));
 chrome.tabs.onUpdated.addListener((tabId, change, tab) => {
+  if (change.status === 'loading' || change.url) summaries.invalidate(tabId);
   if (change.status === 'loading') { abortRequests(item => item.tabId === tabId); setBadge(tabId, false).catch(() => {}); }
   if (tab.active && (change.status === 'complete' || change.url)) ready.then(() => menus.update(tabId)).catch(() => {});
 });
-chrome.tabs.onRemoved.addListener(tabId => abortRequests(item => item.tabId === tabId));
+chrome.tabs.onRemoved.addListener(tabId => { abortRequests(item => item.tabId === tabId); summaries.remove(tabId); });
+chrome.runtime.onConnect.addListener(port => {
+  if (port.name !== 'SHIYI_SUMMARY' || !trusted(port.sender) || new URL(port.sender.url).pathname !== '/summary.html') { port.disconnect(); return; }
+  summaries.connect(port);
+});

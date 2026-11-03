@@ -1,0 +1,65 @@
+<!doctype html><html lang="zh-CN"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>点译 · 连接本机 Codex</title><style>*{box-sizing:border-box}html{scroll-behavior:smooth;scroll-padding-top:90px}body{margin:0;background:#f5f5f0;color:#263735;font:14px/1.95 -apple-system,BlinkMacSystemFont,"Segoe UI","PingFang SC",sans-serif}a{color:#006665;text-decoration:none}a:hover{text-decoration:underline}header{padding:18px 30px;position:sticky;top:0;background:#fbfcf8ef;border-bottom:1px solid #dfe5df;backdrop-filter:blur(10px);display:flex;align-items:center;justify-content:space-between;gap:18px;z-index:5}.brand{font-size:23px;font-weight:650;letter-spacing:2px}header small{font-size:11px;color:#61716c;letter-spacing:.7px}.layout{max-width:1400px;display:grid;grid-template-columns:218px minmax(0,1fr);gap:30px;margin:auto;padding:35px 30px 60px}nav{position:sticky;top:105px;height:calc(100vh - 130px);overflow:auto;padding-right:12px}nav small{display:block;font-size:10px;letter-spacing:1.6px;color:#61716c;margin:0 10px 15px}nav a{display:block;padding:8px 10px;margin:3px 0;border-radius:7px;color:#61716c;font-size:12px}nav a:hover{background:#eaf3ee;text-decoration:none;color:#006665}main{min-width:0;border:1px solid #dfe5df;border-radius:13px;background:#fff;padding:37px 43px 45px}.eyebrow{font-size:10px;color:#006665;letter-spacing:2px;margin-bottom:12px;font-weight:600}h1{font-size:30px;font-weight:600;line-height:1.4;margin:0 0 15px;letter-spacing:-.6px}h2{font-size:21px;font-weight:550;margin:37px 0 15px;line-height:1.5}h3{font-size:16px;font-weight:550;margin:25px 0 12px}p{margin:11px 0 17px}blockquote{margin:24px 0;background:#edf4ec;border-left:3px solid #006665;padding:16px 20px;border-radius:0 8px 8px 0;color:#406247;font-size:13px}blockquote p{margin:0}.table-scroll{overflow-x:auto;border:1px solid #dfe5df;border-radius:9px;margin:17px 0 23px}table{width:100%;border-collapse:collapse;font-size:12px;line-height:1.9}th{text-align:left;background:#f2f7ed;color:#4e704d;font-weight:500;padding:12px 14px;border-bottom:1px solid #dfe5df}td{padding:13px 14px;border-bottom:1px solid #e5ebe0;vertical-align:top;min-width:100px}tr:last-child td{border-bottom:0}td:first-child{min-width:130px}tr:nth-child(even) td{background:#fcfdf8}ul,ol{padding-left:23px}li{margin:8px 0}code{background:#eef3e8;border-radius:4px;padding:2px 5px;font-size:12px;overflow-wrap:anywhere}pre{padding:17px 19px;border-radius:8px;background:#eef3e8;overflow:auto;font-size:12px}pre code{padding:0}strong{font-weight:600}.doc-footer{font-size:11px;line-height:1.9;color:#61716c;border-top:1px solid #dfe5df;padding-top:22px;margin-top:35px}.source-label{font-size:10px;color:#61716c;letter-spacing:.5px}.download{font-size:12px;padding:9px 14px;border:1px solid #006665;color:#006665;border-radius:8px;white-space:nowrap;display:inline-block}@media(max-width:900px){.layout{grid-template-columns:175px minmax(0,1fr);gap:20px;padding:25px 20px}main{padding:28px 27px}header small{display:none}}@media(max-width:650px){header{padding:14px 19px}.brand{font-size:20px}.layout{display:block;padding:20px 13px}nav{height:auto;position:static;display:flex;flex-wrap:wrap;gap:5px;padding:0;margin-bottom:18px}nav small{width:100%;margin:0 6px 5px}nav a{font-size:10px;padding:5px 8px;border:1px solid #dfe5df;margin:0}main{padding:25px 20px}h1{font-size:24px}h2{font-size:20px}.table-scroll{margin-left:-6px;margin-right:-6px}table{font-size:11px}td,th{padding:10px;min-width:120px}.download{font-size:10px}}@media(prefers-reduced-motion:reduce){html{scroll-behavior:auto}}@media print{header,nav{display:none}.layout{display:block;padding:0}body{background:white}main{border:0;padding:0}h2{break-after:avoid}tr{break-inside:avoid}}</style></head><body><header><div><span class="brand">点译</span> <small>点一下，读懂。 / v0.12.0</small></div><span class="source-label">CHROME / EDGE</span></header><div class="layout"><nav aria-label="文档目录"><small>CONTENTS / 目录</small><a href="#section-1">1. 准备本机登录</a><a href="#section-2">2. 安装一次本机助手</a><a href="#section-3">3. 检测、选择模型并保存</a><a href="#section-4">仅处理文字的边界</a><a href="#section-5">连接失败时</a></nav><main><div class="eyebrow">本机认证 / Codex 使用指引</div><h1>点译 · 连接本机 Codex</h1>
+<p>Chrome / Edge · v0.12.0 · 本机助手支持 macOS / Linux</p>
+<p><a href="intro.html">返回产品介绍</a></p>
+<p>点译通过官方 Codex app-server 调用本机已经登录的 Codex CLI。浏览器不导入 <code>auth.json</code>，不保存 OAuth 令牌，也不把登录凭据转成 API Key。翻译与总结分别添加「本机 Codex」连接，可各自设为默认或备用。</p>
+<h2 id="section-1">1. 准备本机登录</h2>
+<p>按 <a href="https://learn.chatgpt.com/docs/cli">Codex CLI 官方安装说明</a>安装 CLI，并在终端运行：</p>
+<pre><code class="language-sh">codex login
+</code></pre>
+<p>沿用你已有的正常登录即可，不需要把令牌提供给点译。官方支持 ChatGPT 登录和 API Key 登录，两种方式的额度、权限和数据政策不同，见<a href="https://learn.chatgpt.com/docs/auth?surface=cli">官方认证说明</a>。ChatGPT 登录消耗对应 Codex 账户额度，不等同于普通 API Key 按量计费，也不表示免费或无限使用。</p>
+<p>本次在 macOS、Codex CLI 0.153.4 上，以既有 ChatGPT 登录真实完成短词翻译和增量输出。可用型号以「检测本机登录」返回的列表和你的账户权限为准；<code>auto</code> 沿用本机 Codex 默认型号，可能不是轻量型号。日常翻译可主动选择账户可用的轻量型号。</p>
+<h2 id="section-2">2. 安装一次本机助手</h2>
+<p>浏览器插件不能直接启动本机 CLI，需要用浏览器原生消息机制连接一个本机助手。助手随点译安装包提供，不监听 HTTP / WebSocket 端口，不作为开机服务运行。</p>
+<ol>
+<li>需要 Python 3.10 或更新版本，以及已安装的 Codex CLI。</li>
+<li>在点译「模型连接」或「总结设置」选择「本机 Codex」，点击「复制安装命令」。命令中包含当前扩展的准确 ID。</li>
+<li>在已解压扩展目录的 <code>native-host</code> 文件夹打开终端，粘贴并运行该命令，例如：</li>
+</ol>
+<pre><code class="language-sh">python3 install.py --extension-id 这里替换为插件显示的32位扩展ID
+</code></pre>
+<p>安装器默认给 Chrome 和 Edge 注册本机助手。只使用其中一个浏览器时，可以在命令后增加 <code>--browser chrome</code> 或 <code>--browser edge</code>。如果系统找不到 CLI，可增加 <code>--codex-path</code> 并填写实际的 CLI 路径。</p>
+<p>安装器将本机助手放在 <code>~/.local/share/dianyi-codex/</code>，在当前用户的浏览器 NativeMessagingHosts 目录注册 <code>com.dianyi.codex</code>。来源白名单只包含你提供的明确扩展 ID，不使用通配符；重复安装会保留已明确授权的其他安装 ID。安装器不读取、复制或修改 Codex 的登录文件，不更改你的全局 Codex 配置。</p>
+<p>更换扩展安装目录或浏览器可能改变扩展 ID。如果提示来源未授权，请使用新页面提供的命令重新安装。当前不提供 Windows 本机助手；Windows 上仍可正常使用插件的 API Key 连接。</p>
+<h2 id="section-3">3. 检测、选择模型并保存</h2>
+<ol>
+<li>点击「检测本机登录」。检测不发送网页或翻译请求，只显示是否已登录和可用型号，不显示邮箱、令牌或其他账户资料。</li>
+<li>模型可填 <code>auto</code>，或从检测返回的可用型号中选择。填写容易区分的连接名称。</li>
+<li>选择是否设为默认，再点击「连接并保存」。会发送固定的短测试文字并使用账户额度，成功后保存连接。</li>
+</ol>
+<p>以后正常使用原有划词、整页翻译和总结入口。总结侧栏仍只显示结果，不提供模型或翻译设置。Key 连接和 Codex 连接可以作为彼此的备用；资料可能交由勾选的备用服务处理，按相应账户规则使用额度。</p>
+<h2 id="section-4">仅处理文字的边界</h2>
+<p>本机助手仅允许检测与文本生成，不接受网页传入的命令、可执行路径、文件路径、任意 JSON-RPC 方法或认证数据。每次任务使用独立临时目录和内存会话，采用只读权限、关闭命令及扩展工具，显式停用继承的 MCP 服务；无法施加这些限制时拒绝生成。发现工具调用也会停止。限制只作用于点译启动的任务，不修改你正常使用 Codex 时的功能。</p>
+<p>认证、模型服务连接和组织策略继续由本机 Codex 处理。模型输出不代表对事实的核验。点击停止或取消任务会断开本机消息通道，终止这次生成及其子进程；不会退出你的 Codex 账号。点译「清除 Key」只清除浏览器中保存的 API Key，不会注销 Codex。</p>
+<h2 id="section-5">连接失败时</h2>
+<div class="table-scroll"><table>
+<thead>
+<tr>
+<th>提示</th>
+<th>处理方式</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>未连接本机助手</td>
+<td>核对是否在 <code>native-host</code> 文件夹运行过安装命令，是否允许插件连接本机应用</td>
+</tr>
+<tr>
+<td>当前扩展 ID 未被允许</td>
+<td>从当前插件页面重新复制安装命令并运行</td>
+</tr>
+<tr>
+<td>尚未登录或登录已过期</td>
+<td>在本机运行 <code>codex login</code>，完成后再次检测；不要复制认证令牌</td>
+</tr>
+<tr>
+<td>型号不可用或额度不足</td>
+<td>检查账户权限，尝试 <code>auto</code> 或检测返回的其他型号，或改用已保存的 API 备用连接</td>
+</tr>
+<tr>
+<td>无法应用仅文本限制</td>
+<td>更新 Codex CLI，或使用 API Key 连接；助手不会放宽限制继续运行</td>
+</tr>
+</tbody>
+</table></div>
+<p>协议依据：<a href="https://learn.chatgpt.com/docs/app-server">Codex app-server</a>、<a href="https://developer.chrome.com/docs/extensions/develop/concepts/native-messaging">Chrome 原生消息</a>、<a href="https://learn.microsoft.com/en-us/microsoft-edge/extensions/developer-guide/native-messaging">Edge 原生消息</a>。本机助手实际调用回执和浏览器 UI 验收属于不同范围；当前未宣称已在原生 Edge 或 Windows 完成验收。</p>
+<footer class="doc-footer">点译 v0.12.0 · 自己的模型，按块阅读<br>文档提供 HTML 阅读版及 Markdown 可编辑版本。</footer></main></div></body></html>

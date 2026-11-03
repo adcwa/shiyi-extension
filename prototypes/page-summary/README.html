@@ -1,0 +1,82 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <meta http-equiv="Content-Security-Policy" content="default-src 'none'; style-src 'unsafe-inline'; base-uri 'none'; form-action 'none'">
+  <title>点译 · 网页总结原型说明</title>
+  <style>
+    :root{color-scheme:light;font-family:-apple-system,BlinkMacSystemFont,"Segoe UI","PingFang SC","Microsoft YaHei",sans-serif;color:#263735;background:#f5f5f0}
+    *{box-sizing:border-box}body{max-width:920px;margin:0 auto;padding:40px 28px 72px;font-size:15px;line-height:1.85}main{background:#fff;border:1px solid #dce4df;border-radius:12px;padding:32px 36px}h1{font-size:28px;line-height:1.3;margin:0 0 10px}h2{font-size:20px;line-height:1.45;margin:34px 0 12px}p{margin:12px 0}a{color:#006665;text-underline-offset:3px}a:focus-visible{outline:2px solid #006665;outline-offset:4px}code{font:0.88em ui-monospace,SFMono-Regular,Consolas,monospace;background:#f0f4ee;border-radius:3px;padding:2px 4px;overflow-wrap:anywhere}.intro{color:#566963;margin:0 0 24px}.open{display:inline-block;background:#006665;color:#fff;padding:9px 16px;border-radius:8px;text-decoration:none;font-weight:600}.open:hover{background:#005251}.boundary{padding:14px 16px;background:#eaf3ee;border-radius:8px;margin:20px 0}.table-wrap{overflow-x:auto;border:1px solid #dce4df;border-radius:8px;margin:16px 0}table{border-collapse:collapse;width:100%;min-width:560px;font-size:14px;text-align:left}th,td{padding:10px 12px;border-bottom:1px solid #dce4df;vertical-align:top}th{background:#f5f7f2;font-weight:600}tbody tr:last-child td{border-bottom:0}ol{padding-left:24px}li{padding-left:3px;margin:10px 0}footer{font-size:13px;color:#566963;margin-top:28px;padding-top:16px;border-top:1px solid #dce4df}@media(max-width:640px){body{padding:16px 12px 40px;font-size:14px}main{padding:22px 18px}h1{font-size:24px}h2{font-size:19px}.table-wrap{margin-left:-4px;margin-right:-4px}th,td{padding:9px 10px}}
+  </style>
+</head>
+<body>
+<main>
+  <h1>点译 · 网页总结交互原型</h1>
+  <p class="intro">2026-11-03 · 先体验交互，再决定插件改版</p>
+  <a class="open" href="index.html">打开交互原型</a>
+  <p>直接打开同目录的 <code>index.html</code>，或通过本地静态服务器打开本目录。这是网页原型，不是可安装的浏览器扩展包。</p>
+  <div class="boundary"><strong>识别、模型连接、总结与翻译使用固定示例。</strong>不连接真实模型、不发送网页、不消耗模型额度、不保存 Key。请勿填写真实密钥。复制、图形渲染与文件导出为实际可用操作。</div>
+
+  <h2>建议体验路径</h2>
+  <ol>
+    <li>点击“开始总结”：先出现主题识别，再逐步输出技术总结；左侧网页原文保持不变。</li>
+    <li>生成时向上阅读，内容不会强制跳回底部；点击“停止生成”，已有文字仍可复制和导出。</li>
+    <li>完成后切换“制品”，体验流程图的预览／源码、代码复制、表格与公式。</li>
+    <li>点击侧栏右上角的设置图标：总结与翻译各自配置；总结不接受 <code>qwen-mt-*</code> 专用翻译型号。连接结果也是本地演示，不代表服务或型号已经验证。</li>
+    <li>改选新闻、专业或调研预设：原结果不会自动重跑；点击“重新总结”并明确确认后才重新生成。</li>
+    <li>切换“网页翻译”可体验双语、仅译文、恢复原文与示例本地加载；词库入口支持搜索、编辑、删除和撤销。</li>
+  </ol>
+  <p>顶部“体验场景”用于查看首次配置、额度不足、空白网页与切换网页的状态，不是正式插件的运行开关。</p>
+
+  <h2>演示与实际能力</h2>
+  <div class="table-wrap"><table>
+    <thead><tr><th scope="col">可以实际体验</th><th scope="col">仍是固定示例</th></tr></thead>
+    <tbody>
+      <tr><td>侧栏开关、任务与预设切换、停止和结果保留</td><td>网页正文来自随原型附带的示例文章，不读取任意浏览器标签页</td></tr>
+      <tr><td>Markdown、代码、表格、Mermaid 与公式渲染</td><td>自动识别固定将示例文章归为技术类，不是真实分类判断</td></tr>
+      <tr><td>剪贴板复制和文件下载</td><td>总结与翻译文字、流速、连接成功及额度错误均为模拟</td></tr>
+      <tr><td>提示词编辑、词句搜索／编辑／删除／撤销</td><td>提示词和补充关注点不改变固定输出；目标语言菜单不会产生各语言译文</td></tr>
+    </tbody>
+  </table></div>
+  <p>划词后点击语言胶囊会读取已有示例释义，或新增一条可编辑的示例释义；仅选中或切换语言不发起生成。超过 140 字的选区只提示转到整页阅读，没有实现独立的长选区翻译。黑名单和词句改动只影响当前原型页面，不代表跨网站、跨刷新存储已经接入。</p>
+
+  <h2>总结方式</h2>
+  <div class="table-wrap"><table>
+    <thead><tr><th scope="col">预设</th><th scope="col">重点</th></tr></thead>
+    <tbody>
+      <tr><td>自动识别</td><td>先识别主题与类型，再使用相应预设；不等同于逐句翻译</td></tr>
+      <tr><td>技术总结</td><td>问题、机制、实现流程、代码、依赖和适用边界</td></tr>
+      <tr><td>新闻总结</td><td>事件与事实、时间和主体、引用观点、缺失和待核实信息</td></tr>
+      <tr><td>专业分析</td><td>论点、证据、影响、条件、风险与分析建议</td></tr>
+      <tr><td>调研分析</td><td>研究问题、资料与方法、发现、证据局限及待核实项</td></tr>
+    </tbody>
+  </table></div>
+  <p>调研分析仅依据当前网页，不暗示已进行额外联网调研。原型的新闻预设遇到技术文章时明确指出来源不是新闻，不编造事件。</p>
+
+  <h2>渲染、复制与导出</h2>
+  <div class="table-wrap"><table>
+    <thead><tr><th scope="col">内容</th><th scope="col">预览与复制</th><th scope="col">导出</th></tr></thead>
+    <tbody>
+      <tr><td>总结全文</td><td>Markdown 排版、复制原始 Markdown</td><td><code>.md</code>、独立可阅读 <code>.html</code></td></tr>
+      <tr><td>代码</td><td>等宽显示、复制代码</td><td>对应语言文件，如 <code>.js</code></td></tr>
+      <tr><td>表格</td><td>表格阅读、复制 Markdown 源码</td><td><code>.csv</code>、<code>.md</code></td></tr>
+      <tr><td>Mermaid 图</td><td>SVG 图形／源码切换、复制源码</td><td><code>.svg</code>、<code>.mmd</code></td></tr>
+      <tr><td>公式</td><td>MathML 排版、复制 LaTeX</td><td><code>.tex</code></td></tr>
+    </tbody>
+  </table></div>
+  <p>停止后的部分结果也可导出，会注明“部分结果”；未闭合的代码或图形块会先按源码显示。全文 HTML 导出是独立可阅读文档，不包含可执行脚本；Markdown 不执行原始 HTML，图形使用 strict 安全模式，公式使用不信任 HTML 的 MathML 输出。本轮不包含可执行 HTML 或交互图表。</p>
+
+  <h2>从原型接入真实插件</h2>
+  <p>原生产插件、权限、密钥、词库及安装目录没有被这份原型修改。当前侧栏是网页中的布局，不是浏览器原生侧栏。真实接入仍需实现独立的总结模型配置、正文读取、主题识别请求、真实 SSE 输出与取消处理，以及浏览器原生侧栏和所需权限。</p>
+  <p>未来真实接入可参考 <a href="https://developer.chrome.com/docs/extensions/reference/api/sidePanel">Chrome sidePanel 官方文档</a> 和 <a href="https://learn.microsoft.com/en-us/microsoft-edge/extensions/developer-guide/sidebar">Edge 侧栏官方文档</a>。权限、用户手势触发与支持版本需按目标浏览器核对。</p>
+  <p>自动识别计划分成两步：首先得到主题／类型，再按该类型预设发起总结流。手动预设直接进入总结流。读取仅限当前页已加载的可读正文，排除表单、输入内容、隐藏区和插件自己的 UI；正文变化或切换网页不自动重发请求。超长网页需要明确读取范围和分段策略。</p>
+  <p>正式实现还需验证分离的凭据存储、原生侧栏的标签页绑定、真实厂商 SSE 错误和取消、长文上下文边界、匹配本地结果恢复，以及关闭／切换页面后的请求处理。本轮原型不代表上述接入已经完成。</p>
+
+  <h2>文件与离线边界</h2>
+  <p><code>vendor.js</code> 将 Markdown、Mermaid 与公式渲染器放在本地，不依赖 CDN 或远程字体。依赖许可见 <a href="LICENSES.txt">LICENSES.txt</a>。图形与公式可在离线打开时渲染；浏览器可能限制本地文件的自动剪贴板权限，失败时可选中文本或查看源码后手动复制。界面的“获取 Key”和额度帮助是外部链接，只有主动打开时才访问对应网站。</p>
+  <p>演示状态保存在当前页面内存，刷新会回到初始示例；“关闭再打开侧栏”保留本次内容。“刷新并加载本地结果”只演示已有译文重绘，不会真正刷新页面，不是跨刷新持久化验收。“长期记住密钥”只展示选项，不保存 Key。</p>
+  <footer><a href="README.md">Markdown 编辑版</a> · 本说明无外部资源、远程字体或脚本；官方文档链接仅在主动打开时访问。</footer>
+</main>
+</body>
+</html>

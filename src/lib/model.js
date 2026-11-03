@@ -2,6 +2,7 @@ import { AppError, assert, boundedText, LANGUAGES, PROMPTS, classifyText } from 
 import { providerRequestOptions, isMTProfile } from './providers.js';
 import { makeMTRequest, callMT } from './qwen-mt.js';
 import { makeBlockRequest, parseBlockCompletion, makeBatchRequest, parseBatchCompletion } from './block-model.js';
+import { codexFetch } from './codex.js';
 
 export function makeRequest(profile, prefs, text, context = '') {
   if (isMTProfile(profile)) return makeMTRequest(profile, prefs, text, [], context);
@@ -47,7 +48,7 @@ async function readLimited(response, batched = false) {
   for (const chunk of chunks) { bytes.set(chunk, offset); offset += chunk.length; }
   try { return JSON.parse(new TextDecoder().decode(bytes)); } catch { throw new AppError('INVALID_RESPONSE', '服务没有返回 Chat Completions JSON，请核对服务地址。'); }
 }
-async function serviceError(response, profile, apiKey) {
+export async function serviceError(response, profile, apiKey) {
   const messages = { 400: '服务拒绝了请求，请核对模型名称和接口格式。', 401: 'API Key 无效或已过期，请重新填写，并核对 Key 与服务地址是否属于同一地域和工作空间。', 403: '服务拒绝访问，请检查模型权限或账户状态。', 404: '没有找到模型接口，请核对服务地址与模型名称。', 429: '请求过于频繁或额度不足，请稍后重试或检查服务账户。' };
   let data = {};
   // Only bounded structured error fields are inspected. Never return an
@@ -103,6 +104,7 @@ export async function callModel({ profile, prefs, text, context = '', parts, blo
   const timer = setTimeout(() => { timedOut = true; controller.abort(); }, profile.timeoutSeconds * 1000);
   try {
     const request = async body => {
+      if (profile.provider === 'codex') return readLimited(await codexFetch(profile, body, controller.signal), !!blocks);
       const response = await fetchImpl(profile.endpoint, {
         method: 'POST', headers: { 'Content-Type': 'application/json', ...(profile.auth === 'bearer' ? { Authorization: `Bearer ${apiKey}` } : {}) },
         body: JSON.stringify(body), signal: controller.signal,

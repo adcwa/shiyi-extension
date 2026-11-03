@@ -19,6 +19,13 @@ for name, filename, count in [('browser_integration', 'extension-e2e.json', 45),
     result = json.loads((OUT/filename).read_text())
     assert result['version'] == VERSION and result['result'] == 'pass' and len(result['checks']) == count, filename
     reports[name] = result
+summary = json.loads((OUT/('summary-'+VERSION+'.json')).read_text())
+assert summary['version'] == VERSION and summary['result'] == 'pass' and len(summary['checks']) == 19
+reports['summary'] = summary
+native_summary = json.loads((OUT/('summary-native-'+VERSION+'.json')).read_text())
+assert native_summary['result'] == 'pass' and native_summary['popup_one_activation'] and native_summary['context_menu_real_click'] and not native_summary['native_menu_replay']
+units = json.loads((OUT/('unit-'+VERSION+'.json')).read_text())
+assert units['result'] == 'pass' and units['passed'] == 102
 throughput = json.loads((OUT/('reader-throughput-'+VERSION+'.json')).read_text())
 assert throughput['version'] == VERSION and throughput['result'] == 'pass'
 assert json.loads((OUT/('long-text-'+VERSION+'.json')).read_text())['result'] == 'pass'
@@ -53,15 +60,20 @@ try:
             assert not any(Path(name).suffix.lower() in ('.doc', '.docx') for name in archive.namelist())
             archive.extractall(extracted)
         files = [path.relative_to(extracted) for path in extracted.rglob('*') if path.is_file()]
-        assert len(files) == 36
+        expected = {path.relative_to(ROOT/'src') for path in (ROOT/'src').rglob('*') if path.is_file()}
+        expected.update(Path(name) for name in ['INSTALL.md','INSTALL.html','provider-defaults.md','provider-defaults.html','summary-guide.md','summary-guide.html',*[f'icons/icon{size}.png' for size in [16,32,48,128]]])
+        assert set(files) == expected
         for rel in files: assert (extracted/rel).read_bytes() == (RELEASE/rel).read_bytes(), str(rel)
         for path in extracted.rglob('*.js'):
             assert not any(value in path.read_text() for value in ['fixture-key', 'fixture-memory-key', '__shiyiMenuReplay', '__shiyiMigrate']), str(path)
         manifest = json.loads((extracted/'manifest.json').read_text())
-        assert manifest['name'] == '点译 · 划词与整页翻译' and manifest['short_name'] == '点译' and manifest['version'] == VERSION
+        assert manifest['name'] == '点译 · 翻译与网页总结' and manifest['short_name'] == '点译' and manifest['version'] == VERSION
         assert (extracted/'INSTALL.md').read_bytes() == (ROOT/'docs/user-guide.md').read_bytes()
         assert (extracted/'INSTALL.html').read_bytes() == (ROOT/'docs/user-guide.html').read_bytes()
         assert manifest['permissions'] == json.loads((ROOT/'src/manifest.json').read_text())['permissions']
+        assert manifest['side_panel'] == {'default_path':'summary.html'} and 'sidePanel' in manifest['permissions']
+        assert 'ui/summary.js' in (extracted/'summary.html').read_text()
+        assert (extracted/'summary-guide.html').read_bytes() == (ROOT/'docs/summary-guide.html').read_bytes()
         browser = next((Path.home()/'Library/Caches/ms-playwright').glob('chromium-1234/chrome-mac-arm64/Google Chrome for Testing.app/Contents/MacOS/Google Chrome for Testing'))
         context = playwright.chromium.launch_persistent_context(str(temp/'profile'), executable_path=str(browser), headless=True, ignore_default_args=['--disable-extensions'], args=['--disable-extensions-except='+str(extracted), '--load-extension='+str(extracted)], viewport={'width':1000,'height':800})
         try:
@@ -147,9 +159,9 @@ try:
 finally:
     server.shutdown(); server.server_close()
 
-old_versions = ['0.1.0','0.1.1','0.2.0','0.2.1','0.3.0','0.3.1','0.4.0','0.5.0','0.5.1','0.6.0','0.6.1','0.7.0','0.7.1','0.8.0','0.9.0']
+old_versions = ['0.1.0','0.1.1','0.2.0','0.2.1','0.3.0','0.3.1','0.4.0','0.5.0','0.5.1','0.6.0','0.6.1','0.7.0','0.7.1','0.8.0','0.9.0','0.9.1']
 synced = []
-for name in [*('shiyi-'+old for old in old_versions), 'dianyi-0.6.0', 'dianyi-0.6.1', 'dianyi-0.7.0', 'dianyi-0.7.1', 'dianyi-0.8.0', 'dianyi-0.9.0']:
+for name in [*('shiyi-'+old for old in old_versions), 'dianyi-0.6.0', 'dianyi-0.6.1', 'dianyi-0.7.0', 'dianyi-0.7.1', 'dianyi-0.8.0', 'dianyi-0.9.0', 'dianyi-0.9.1']:
     destination = ROOT/'releases'/name
     if not destination.exists(): continue
     shutil.copytree(RELEASE, destination, dirs_exist_ok=True)
@@ -158,7 +170,7 @@ for name in [*('shiyi-'+old for old in old_versions), 'dianyi-0.6.0', 'dianyi-0.
 for rel in files: assert (ROOT/'releases'/('shiyi-'+VERSION)/rel).read_bytes() == (RELEASE/rel).read_bytes(), str(rel)
 archives = sorted((ROOT/'releases').glob('*chrome-edge-*.zip'))
 (ROOT/'releases/SHA256SUMS.txt').write_text(''.join(hashlib.sha256(path.read_bytes()).hexdigest()+'  '+path.name+'\n' for path in archives))
-report = {'version':VERSION, 'name':'点译', 'zip':ARCHIVE.name, 'bytes':ARCHIVE.stat().st_size, 'sha256':hashlib.sha256(ARCHIVE.read_bytes()).hexdigest(), 'browser_storage_modified':False, 'test_profile':'isolated temporary', 'production_files':len(files), 'zip_integrity':'pass', 'unmodified_extracted_zip_load':'pass', 'test_hooks_in_production':False, 'embedded_test_credentials':False, 'word_files':False, 'new_permissions_since_0.3.0':False, 'default_web_access':'HTTP(S)', 'initial_vocabulary_entries':0, 'default_blacklist_entries':0, 'checks':{'production_scripts':len(list((ROOT/'src').rglob('*.js'))), 'unit_tests':91, **{name:len(value['checks']) for name,value in reports.items()}}, 'verified_versions':{name:VERSION for name in [*reports,'throughput','long_text']}, 'original_install_directories_synced':synced}
+report = {'version':VERSION, 'name':'点译', 'zip':ARCHIVE.name, 'bytes':ARCHIVE.stat().st_size, 'sha256':hashlib.sha256(ARCHIVE.read_bytes()).hexdigest(), 'browser_storage_modified':False, 'test_profile':'isolated temporary', 'production_files':len(files), 'zip_integrity':'pass', 'unmodified_extracted_zip_load':'pass', 'test_hooks_in_production':False, 'embedded_test_credentials':False, 'word_files':False, 'new_permissions_since_0.9.1':['sidePanel'], 'default_web_access':'HTTP(S)', 'initial_vocabulary_entries':0, 'default_blacklist_entries':0, 'checks':{'production_scripts':len(list((ROOT/'src').rglob('*.js'))), 'unit_tests':units['passed'], **{name:len(value['checks']) for name,value in reports.items()}}, 'verified_versions':{name:VERSION for name in [*reports,'throughput','long_text']}, 'original_install_directories_synced':synced}
 report['model_access'] = {'result':'pass','bounded_structured_errors':True,'raw_upstream_message_exposed':False,'credentials_saved_in_diagnostic':False,'qwen_workspace_and_public_quota_shapes':'pass','original_http_categories_preserved':True,'new_runtime_flags':False}
 report['page_memory'] = {'result':'pass','database_version':2,'upgrade_from':'immutable 0.5.1 ZIP','preserves_extension_id_library_model_preferences_credentials':True,'refresh_model_requests':0,'retranslate_bypasses_old_results':True,'stale_revision_rejected':True,'selection_and_spa_isolation':True,'ttl_days':7,'max_pages':50,'max_page_bytes':3*1024*1024,'max_total_bytes':20*1024*1024}
 report['reading_appearance'] = {'background':'transparent','border_px':0,'bilingual_font_delta_px':-2,'translation_only_preserves_font':True,'animated_cat':'pass','cat_size_px':[24,26.67],'companion_default':'hidden, toolbar popup opt-in per document','explicit_close':'pass','reduced_motion':'pass','compact_navigation':'pass','numeric_badges_unchanged':'pass'}
@@ -169,6 +181,7 @@ report['inline_structure'] = {'local_tree_mapping':'pass','text_tags':35,'histor
 report['batch_reading'] = {'default_blocks':16,'range':[1,64],'concurrent_requests':2,'fixture_120_blocks_requests':throughput['model_requests'],'fixture_elapsed_ms':throughput['elapsed_ms'],'fixture_first_visible_ms':throughput['first_visible_translation_ms'],'scope':throughput['scope']}
 report['repeated_word_stability'] = {'result':'pass','same_paragraph_live_counter':'zero mark and meaning replacements','dense_repeated_occurrences':180,'exact_source_restore':'pass','delete_undo':'pass','unmodified_extracted_zip_inline_node_retention':'pass'}
 report['repeated_word_stability']['incremental_reconciliation'] = {'actual_selection_and_new_term':'retain existing nodes', 'changing_match_in_same_paragraph':'retain unaffected marks and meanings', 'glossary_broadcasts':5, 'appearance_updates':'no replacement', 'empty_frames':0, 'test':'selection_stability_e2e.py', 'debug_flags_required':False}
-report['native_context_menu'] = {'os_click_verified_version':'0.3.0','behavior_and_permissions_unchanged':True,'labels_updated':'点译','callback_path_verified_version':VERSION}
+report['native_context_menu'] = {'os_click_verified_version':'0.3.0','translation_behavior_preserved':True, 'new_summary_item':True,'labels_updated':'点译','callback_path_verified_version':VERSION}
+report['summary'] = {'result':'pass','checks':len(summary['checks']),'independent_credentials':True,'transport':'real local HTTP/SSE, unchanged extracted ZIP','paid_provider_account_tested':False,'native_popup_and_context_menu':'pass','native_resize_handle_present':True,'physical_drag_verification':native_summary['physical_drag_verification'],'artifacts':['Markdown','code','table','Mermaid','MathML'],'exports':['md','html','csv','svg','mmd','tex','code'],'max_input_chars':60000,'max_output_chars':80000,'max_duration_seconds':180,'session_results':8,'sidebar_settings_or_translation':False}
 (OUT/'package.json').write_text(json.dumps(report, ensure_ascii=False, indent=2)+'\n')
 print(json.dumps({'version':VERSION,'zip':ARCHIVE.name,'files':len(files),'bytes':report['bytes'],'sha256':report['sha256'],'synced_install_paths':len(synced),'historical_zips_preserved':len(archives)-1}, ensure_ascii=False, indent=2))

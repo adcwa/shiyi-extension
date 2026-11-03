@@ -1,0 +1,134 @@
+<!doctype html><html lang="zh-CN"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>点译 v0.12.0 · 紧凑排版方案</title><style>*{box-sizing:border-box}html{scroll-behavior:smooth;scroll-padding-top:90px}body{margin:0;background:#f5f5f0;color:#263735;font:14px/1.95 -apple-system,BlinkMacSystemFont,"Segoe UI","PingFang SC",sans-serif}a{color:#006665;text-decoration:none}a:hover{text-decoration:underline}header{padding:18px 30px;position:sticky;top:0;background:#fbfcf8ef;border-bottom:1px solid #dfe5df;backdrop-filter:blur(10px);display:flex;align-items:center;justify-content:space-between;gap:18px;z-index:5}.brand{font-size:23px;font-weight:650;letter-spacing:2px}header small{font-size:11px;color:#61716c;letter-spacing:.7px}.layout{max-width:1400px;display:grid;grid-template-columns:218px minmax(0,1fr);gap:30px;margin:auto;padding:35px 30px 60px}nav{position:sticky;top:105px;height:calc(100vh - 130px);overflow:auto;padding-right:12px}nav small{display:block;font-size:10px;letter-spacing:1.6px;color:#61716c;margin:0 10px 15px}nav a{display:block;padding:8px 10px;margin:3px 0;border-radius:7px;color:#61716c;font-size:12px}nav a:hover{background:#eaf3ee;text-decoration:none;color:#006665}main{min-width:0;border:1px solid #dfe5df;border-radius:13px;background:#fff;padding:37px 43px 45px}.eyebrow{font-size:10px;color:#006665;letter-spacing:2px;margin-bottom:12px;font-weight:600}h1{font-size:30px;font-weight:600;line-height:1.4;margin:0 0 15px;letter-spacing:-.6px}h2{font-size:21px;font-weight:550;margin:37px 0 15px;line-height:1.5}h3{font-size:16px;font-weight:550;margin:25px 0 12px}p{margin:11px 0 17px}blockquote{margin:24px 0;background:#edf4ec;border-left:3px solid #006665;padding:16px 20px;border-radius:0 8px 8px 0;color:#406247;font-size:13px}blockquote p{margin:0}.table-scroll{overflow-x:auto;border:1px solid #dfe5df;border-radius:9px;margin:17px 0 23px}table{width:100%;border-collapse:collapse;font-size:12px;line-height:1.9}th{text-align:left;background:#f2f7ed;color:#4e704d;font-weight:500;padding:12px 14px;border-bottom:1px solid #dfe5df}td{padding:13px 14px;border-bottom:1px solid #e5ebe0;vertical-align:top;min-width:100px}tr:last-child td{border-bottom:0}td:first-child{min-width:130px}tr:nth-child(even) td{background:#fcfdf8}ul,ol{padding-left:23px}li{margin:8px 0}code{background:#eef3e8;border-radius:4px;padding:2px 5px;font-size:12px;overflow-wrap:anywhere}pre{padding:17px 19px;border-radius:8px;background:#eef3e8;overflow:auto;font-size:12px}pre code{padding:0}strong{font-weight:600}.doc-footer{font-size:11px;line-height:1.9;color:#61716c;border-top:1px solid #dfe5df;padding-top:22px;margin-top:35px}.source-label{font-size:10px;color:#61716c;letter-spacing:.5px}.download{font-size:12px;padding:9px 14px;border:1px solid #006665;color:#006665;border-radius:8px;white-space:nowrap;display:inline-block}@media(max-width:900px){.layout{grid-template-columns:175px minmax(0,1fr);gap:20px;padding:25px 20px}main{padding:28px 27px}header small{display:none}}@media(max-width:650px){header{padding:14px 19px}.brand{font-size:20px}.layout{display:block;padding:20px 13px}nav{height:auto;position:static;display:flex;flex-wrap:wrap;gap:5px;padding:0;margin-bottom:18px}nav small{width:100%;margin:0 6px 5px}nav a{font-size:10px;padding:5px 8px;border:1px solid #dfe5df;margin:0}main{padding:25px 20px}h1{font-size:24px}h2{font-size:20px}.table-scroll{margin-left:-6px;margin-right:-6px}table{font-size:11px}td,th{padding:10px;min-width:120px}.download{font-size:10px}}@media(prefers-reduced-motion:reduce){html{scroll-behavior:auto}}@media print{header,nav{display:none}.layout{display:block;padding:0}body{background:white}main{border:0;padding:0}h2{break-after:avoid}tr{break-inside:avoid}}</style></head><body><header><div><span class="brand">点译</span> <small>点一下，读懂。 / v0.12.0</small></div><span class="source-label">CHROME / EDGE</span></header><div class="layout"><nav aria-label="文档目录"><small>CONTENTS / 目录</small><a href="#section-1">目标</a><a href="#section-2">小猫方案</a><a href="#section-3">留白根因与验证</a><a href="#section-4">实施方案</a><a href="#section-5">验证结果</a><a href="#section-6">复现与材料</a></nav><main><div class="eyebrow">COMPACT READING / 界面留白优化</div><h1>点译 v0.6.1 · 小猫入口与双语界面留白优化</h1>
+<p>2026-11-03</p>
+<h2 id="section-1">目标</h2>
+<p>网页平时保持安静；需要时从工具栏唤出小猫。正文适合按段对照，导航与控件需要保持紧凑，译文应跟随文字，避免把图标、标签和数字计数撑散。</p>
+<h2 id="section-2">小猫方案</h2>
+<ul>
+<li>图形从 72×80px 缩至 24×26.67px，约为原尺寸的 1/3；点击区域保留为 32×36px，菜单文字保持可读。</li>
+<li>新网页、刷新、路由切换和本地译文恢复时隐藏。用户打开工具栏点译后，才在当前文档显示小猫，显示操作不请求模型。</li>
+<li>点击小猫展开功能；面板右上角「×」完全关闭，Esc 仅收起菜单。进度更新、配置广播和插件浮窗轮询不会重新唤出已关闭的小猫。</li>
+<li>保留轻微呼吸、眨眼与摆尾；系统减少动态效果时静止。取消常驻「点译／已完成」文字牌，翻译中只显示小点，完整进度在菜单中查看。</li>
+</ul>
+<h2 id="section-3">留白根因与验证</h2>
+<p>以带图标、文字、计数的菜单项构建真实扩展复现，逐步缩小至一个 grid 菜单项；使用隔离 Chromium 和本机固定响应服务，不包含账号数据或真实模型 Key。</p>
+<div class="table-scroll"><table>
+<thead>
+<tr>
+<th>检查</th>
+<th>v0.6.0 实测</th>
+<th>判断</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>一项菜单，翻译前／后</td>
+<td>36px → 134.39px</td>
+<td>译文作为新 grid 项进入 16px 图标列，逐字换行</td>
+</tr>
+<tr>
+<td>只去掉译文外边距</td>
+<td>132px</td>
+<td>间距并非主要原因</td>
+</tr>
+<tr>
+<td>只把译文移入文字区域</td>
+<td>64.58px</td>
+<td>插入位置是主要原因，仍需紧凑布局</td>
+</tr>
+<tr>
+<td>该菜单返回的整段译文</td>
+<td>合并请求1</td>
+<td>数字计数混入了重复译文</td>
+</tr>
+</tbody>
+</table></div>
+<h2 id="section-4">实施方案</h2>
+<div class="table-scroll"><table>
+<thead>
+<tr>
+<th>内容</th>
+<th>显示方式</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>正文、长段落</td>
+<td>保持段落后的独立译文块，颜色区分，无底色／侧线，字号减小 2px</td>
+</tr>
+<tr>
+<td>导航、按钮、短表格标签</td>
+<td>使用已对齐的片段译文，追加到对应文字区域，短标签并排</td>
+</tr>
+<tr>
+<td>长菜单标签</td>
+<td>译文作为整体换到紧凑次行，不占用图标／计数列，无上下外边距</td>
+</tr>
+<tr>
+<td>单行省略的标签</td>
+<td>先尝试并排；溢出时只把译文改为文字区域内的一行，不改宿主样式</td>
+</tr>
+<tr>
+<td>纯数字徽标和图标</td>
+<td>保留原位和原值，不追加重复释义；仅译文模式同样保留纯数字</td>
+</tr>
+<tr>
+<td>仅译文</td>
+<td>继续更新原文本节点，保留原字号、控件元素和事件</td>
+</tr>
+</tbody>
+</table></div>
+<p>匿名文本位于 flex/grid 容器时，仅用临时透明标签把原文节点与译文组合为一个布局项；图标、计数和箭头保持原来的布局项。一个阅读记录可拥有多个译文片段，模式切换与恢复统一清理。原节点身份保留，移除临时包裹后原 HTML 精确还原。</p>
+<p>本地映射把临时包裹视为透明，原文结构签名与已有缓存兼容，不需要因为排版更新重新请求模型。</p>
+<h2 id="section-5">验证结果</h2>
+<div class="table-scroll"><table>
+<thead>
+<tr>
+<th>指标</th>
+<th>原页面</th>
+<th>v0.6.0</th>
+<th>v0.6.1</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>8 项侧栏总高</td>
+<td>345px</td>
+<td>543.56px</td>
+<td>363px</td>
+</tr>
+<tr>
+<td>长菜单项</td>
+<td>36px</td>
+<td>134.39px</td>
+<td>54px</td>
+</tr>
+<tr>
+<td>其余 7 项菜单</td>
+<td>每项 36px</td>
+<td>部分 63–81px</td>
+<td>每项 36px</td>
+</tr>
+<tr>
+<td>数字徽标列与内容</td>
+<td>原始值</td>
+<td>可能重复进入译文</td>
+<td>原列、原值</td>
+</tr>
+<tr>
+<td>刷新恢复新增模型请求</td>
+<td>—</td>
+<td>—</td>
+<td>0</td>
+</tr>
+</tbody>
+</table></div>
+<p>21 项专项覆盖小猫默认隐藏、工具栏唤出、1/3 尺寸、关闭与防止自动唤出、标签／数字对齐、匿名文本、多片段按钮、单行省略、原 HTML 恢复、文本节点与按钮事件保留、缓存恢复及无未捕获错误。实测是代表性布局验证，不代表所有网站都具有完全相同的结构。</p>
+<h2 id="section-6">复现与材料</h2>
+<pre><code class="language-sh">node scripts/e2e.mjs tests/compact_layout_e2e.py --baseline
+node scripts/e2e.mjs tests/compact_layout_e2e.py --baseline --minimal
+node scripts/e2e.mjs tests/compact_layout_e2e.py
+node scripts/e2e.mjs tests/compact_layout_e2e.py --minimal
+</code></pre>
+<p>基线始终读取不可变的 v0.6.0 ZIP；当前验证读取当前版本解压目录。所有浏览器配置均为临时隔离配置。</p>
+<p>机器结果位于 verification/compact-baseline-0.6.0.json、compact-baseline-0.6.0-minimal.json、compact-layout-0.6.1.json。截图位于 verification/compact-bilingual-0.6.1.png。</p>
+<footer class="doc-footer">点译 v0.12.0 · 自己的模型，按块阅读<br>文档提供 HTML 阅读版及 Markdown 可编辑版本。</footer></main></div></body></html>

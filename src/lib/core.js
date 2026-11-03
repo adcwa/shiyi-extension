@@ -2,7 +2,7 @@ import './text.js';
 import './block-text.js';
 import { DEFAULT_PROVIDER, PROVIDERS, presetProfile } from './providers.js';
 
-export const VERSION = '0.9.1';
+export const VERSION = '0.12.0';
 export const LANGUAGES = Object.freeze({ 'zh-CN': '简体中文', en: 'English', ja: '日本語', ko: '한국어', fr: 'Français', de: 'Deutsch', es: 'Español' });
 export const STYLES = Object.freeze({ regular: '常规', professional: '专业', humorous: '幽默', custom: '自定义' });
 export const PROMPTS = Object.freeze({
@@ -54,6 +54,16 @@ export function modelEndpoint(value) {
 export function cleanProfile(input) {
   assert(input && typeof input === 'object', 'INVALID_INPUT', '模型配置格式不正确。');
   const provider = input.provider ?? 'custom';
+  const connectionId = Object.hasOwn(input, 'connectionId') ? input.connectionId : undefined;
+  assert(connectionId === undefined || connectionId === null || typeof connectionId === 'string' && /^[a-z\d-]{1,80}$/i.test(connectionId), 'INVALID_INPUT', '模型连接标识不正确。');
+  const connection = connectionId === undefined ? {} : { connectionId };
+  if (provider === 'codex') {
+    const timeoutSeconds = Number(input.timeoutSeconds ?? 60);
+    assert([30, 60, 120, 180].includes(timeoutSeconds), 'INVALID_INPUT', '本机 Codex 超时可选择 30、60、120 或 180 秒。');
+    const model = boundedText(input.model || 'auto', 160, 'Codex 模型');
+    assert(/^[a-z\d._:/-]+$/i.test(model), 'INVALID_INPUT', '请填写 Codex 提供的模型标识，或使用 auto。');
+    return { provider, region: '', name: boundedText(input.name || '本机 Codex', 40, '连接名称'), endpoint: 'codex://local', model, auth: 'none', timeoutSeconds, rememberKey: false, ...connection };
+  }
   assert(provider === 'custom' || Object.hasOwn(PROVIDERS, provider), 'INVALID_INPUT', '请选择支持的厂家，或选择自定义服务。');
   const preset = provider === 'custom' ? null : presetProfile(provider, input.region || 'cn');
   assert(provider === 'custom' || preset, 'INVALID_INPUT', '请选择有效的服务地域。');
@@ -64,7 +74,7 @@ export function cleanProfile(input) {
   const timeoutSeconds = Number(input.timeoutSeconds ?? 20);
   assert(Number.isInteger(timeoutSeconds) && timeoutSeconds >= 5 && timeoutSeconds <= 25, 'INVALID_INPUT', '请求超时需要在 5–25 秒之间。');
   return { provider, region: preset?.region || '', name: boundedText(input.name || preset?.name || '我的翻译模型', 40, '连接名称'), endpoint,
-    model: boundedText(input.model?.trim() || preset?.model || '', 160, '模型名称'), auth, timeoutSeconds, rememberKey: input.rememberKey === true };
+    model: boundedText(input.model?.trim() || preset?.model || '', 160, '模型名称'), auth, timeoutSeconds, rememberKey: input.rememberKey === true, ...connection };
 }
 export function permissionPattern(value) {
   const url = new URL(value);
@@ -113,7 +123,7 @@ export async function digest(value) {
   return Array.from(new Uint8Array(buffer), x => x.toString(16).padStart(2, '0')).join('');
 }
 export function friendlyError(error) {
-  if (error instanceof AppError) return { code: error.code, message: error.message };
+  if (error instanceof AppError) return { code: error.code, message: error.message, ...(error.connectionsExhausted ? { connectionsExhausted: true } : {}) };
   if (error?.name === 'QuotaExceededError') return { code: 'STORAGE_FULL', message: '本地存储空间不足，请先导出并整理词库。' };
   return { code: 'INTERNAL', message: '操作未完成，请重试；如刚更新插件，请刷新网页。' };
 }

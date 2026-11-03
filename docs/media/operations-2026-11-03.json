@@ -1,0 +1,26 @@
+{
+  "capturedAt": "2026-11-03",
+  "scope": "Actual installed Chrome extension on public webpages; no mocked model responses or injected vocabulary.",
+  "phrase": "Progressive enhancement",
+  "translation": "渐进增强",
+  "operations": [
+    {
+      "source": "https://developer.mozilla.org/en-US/docs/Glossary/Progressive_Enhancement",
+      "action": "Native text selection, clicked the live language capsule, received translation and observed saved glossary marks."
+    },
+    {
+      "source": "https://developer.mozilla.org/en-US/docs/Glossary/Graceful_degradation",
+      "action": "Opened a related public article, without another translation action; Progressive enhancement appeared automatically with its stored Chinese meaning."
+    }
+  ],
+  "credentials": "Existing extension connection used by its normal UI; no API Key observed, read or exported.",
+  "newTranslationActions": 1,
+  "assets": [
+    "src/assets/promo/translation.png",
+    "src/assets/promo/revisit.png",
+    "src/assets/promo/meaning.png"
+  ],
+  "billingBoundary": "Provider billing/financial account was not accessed; no monetary savings claim.",
+  "additional_check": "Cross-domain appearance was also observed on Wikipedia. It was excluded from published screenshots because another installed page translator was active there.",
+  "screenshot_method": "Native browser Page.captureScreenshot on public HTTPS pages; PNG crops without compositing or text replacement."
+}

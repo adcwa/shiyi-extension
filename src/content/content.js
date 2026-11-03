@@ -29,6 +29,9 @@
     onExit: () => { if (enabled) { observe(); if (entries.size) queueScan(document.body); } },
     onState: renderReader
   });
+  // Isolated-world access only: summary reads source text without changing the
+  // page, including when the reader currently replaces it with translations.
+  globalThis.ShiyiPageSource = Object.freeze({ text: node => reader.sourceText(node) });
   const paths = {
     logo: ['M4 5.5h6.5L8 13h7l-2.5 5.5M4 20h16M16 4h4v4M20 4l-5 5'],
     chevron: ['m7 10 5 5 5-5'], more: ['M4 12h.01M12 12h.01M20 12h.01'],
@@ -62,7 +65,7 @@
     let response;
     try { response = await chrome.runtime.sendMessage({ type: `SHIYI/${type}`, ...payload }); }
     catch { throw Object.assign(new Error('点译已更新或暂时无法连接，请刷新网页后重试。'), { code: 'DISCONNECTED' }); }
-    if (!response?.ok) throw Object.assign(new Error(response?.error?.message || '操作未完成，请重试。'), { code: response?.error?.code });
+    if (!response?.ok) throw Object.assign(new Error(response?.error?.message || '操作未完成，请重试。'), { code: response?.error?.code, connectionsExhausted: response?.error?.connectionsExhausted === true });
     return response.data;
   }
   const uiStyle = `:host{all:initial}*{box-sizing:border-box}svg{width:16px;height:16px;fill:none;stroke:currentColor;stroke-width:1.7;stroke-linecap:round;stroke-linejoin:round;flex-shrink:0}button,input{font:inherit}button{cursor:pointer;border:0;background:none;color:inherit}button:focus-visible,input:focus-visible,[tabindex]:focus-visible{outline:2px solid #006665;outline-offset:3px}button:hover{background:#eaf2e9}button:disabled{opacity:.6;cursor:wait}.panel{pointer-events:auto;position:fixed;max-width:calc(100vw - 24px);max-height:calc(100vh - 24px);overflow:auto;background:#fff;color:#263735;border:1px solid #ccdcd0;border-radius:13px;box-shadow:0 12px 44px #1739272b;font:13px/1.75 -apple-system,BlinkMacSystemFont,'Segoe UI','PingFang SC','Microsoft YaHei',sans-serif;text-align:left;letter-spacing:normal;word-break:normal}.tool{display:flex;gap:4px;padding:5px;align-items:center;border-radius:9px;width:max-content;flex-wrap:wrap}.tool button{padding:8px 11px;border-radius:6px;display:flex;align-items:center;gap:6px;white-space:nowrap;font-size:12px}.tool .primary,.primary{background:#006665;color:#fff}.tool .primary:hover,.primary:hover{background:#005251}.tool label{display:flex;align-items:center;gap:4px;font-size:10px;padding:5px 4px;cursor:pointer;white-space:nowrap}.tool input{accent-color:#006665;width:13px;height:13px}.card{width:320px;border-radius:10px;box-shadow:0 6px 26px #17392720}
@@ -150,7 +153,7 @@
     readerBar.querySelector('.pet-cache').textContent = state.cacheError || (state.restored ? `已从本地加载 ${state.restored} 块${state.newContent ? '，页面有新内容。' : '，无需重复请求。'}` : state.cached ? '本页译文已暂存在此浏览器。' : '翻译后自动暂存，刷新可直接恢复。');
     readerBar.querySelector('.pet-error').textContent = state.error || '';
     for (const [name, show] of Object.entries({ stop: state.running, resume: state.active && !state.running && state.waiting > 0, retry: state.active && !state.running && state.failed > 0, refresh: state.active && !state.running && state.newContent, retranslate: state.active || state.cached > 0, restore: state.active })) readerBar.querySelector(`[data-reader-action="${name}"]`).hidden = !show;
-    readerBar.querySelector('[data-reader-setup]').hidden = !['MODEL_NOT_CONFIGURED', 'MISSING_KEY', 'MODEL_PERMISSION', 'HTTP_401', 'HTTP_403'].includes(state.errorCode);
+    readerBar.querySelector('[data-reader-setup]').hidden = !['MODEL_NOT_CONFIGURED', 'MISSING_KEY', 'MODEL_PERMISSION', 'HTTP_401', 'HTTP_403', 'CODEX_UNAVAILABLE', 'CODEX_AUTH', 'CODEX_PERMISSION', 'CODEX_MODEL', 'CODEX_CAPABILITY'].includes(state.errorCode);
   }
   function hidePanel() { clearTimeout(closeTimer); panel?.remove(); panel = null; }
   function scheduleHide() {
@@ -280,7 +283,7 @@
   }
   function showError(selection, error) {
     const node = newPanel('card', selection.rect, '翻译未完成');
-    const needSetup = ['MODEL_NOT_CONFIGURED', 'MISSING_KEY', 'MODEL_PERMISSION', 'HTTP_401', 'HTTP_403'].includes(error.code);
+    const needSetup = ['MODEL_NOT_CONFIGURED', 'MISSING_KEY', 'MODEL_PERMISSION', 'HTTP_401', 'HTTP_403', 'CODEX_UNAVAILABLE', 'CODEX_AUTH', 'CODEX_PERMISSION', 'CODEX_MODEL', 'CODEX_CAPABILITY'].includes(error.code);
     node.append(el('div', { class: 'inside' },
       el('div', { class: 'meaning error', role: 'alert' }, error.message),
       el('div', { class: 'source-text', 'aria-label': '原文' }, selection.text)));

@@ -1,0 +1,110 @@
+<!doctype html><html lang="zh-CN"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>双语译文链接：定位与已实施方案</title><style>*{box-sizing:border-box}html{scroll-behavior:smooth;scroll-padding-top:90px}body{margin:0;background:#f5f5f0;color:#263735;font:14px/1.95 -apple-system,BlinkMacSystemFont,"Segoe UI","PingFang SC",sans-serif}a{color:#006665;text-decoration:none}a:hover{text-decoration:underline}header{padding:18px 30px;position:sticky;top:0;background:#fbfcf8ef;border-bottom:1px solid #dfe5df;backdrop-filter:blur(10px);display:flex;align-items:center;justify-content:space-between;gap:18px;z-index:5}.brand{font-size:23px;font-weight:650;letter-spacing:2px}header small{font-size:11px;color:#61716c;letter-spacing:.7px}.layout{max-width:1400px;display:grid;grid-template-columns:218px minmax(0,1fr);gap:30px;margin:auto;padding:35px 30px 60px}nav{position:sticky;top:105px;height:calc(100vh - 130px);overflow:auto;padding-right:12px}nav small{display:block;font-size:10px;letter-spacing:1.6px;color:#61716c;margin:0 10px 15px}nav a{display:block;padding:8px 10px;margin:3px 0;border-radius:7px;color:#61716c;font-size:12px}nav a:hover{background:#eaf3ee;text-decoration:none;color:#006665}main{min-width:0;border:1px solid #dfe5df;border-radius:13px;background:#fff;padding:37px 43px 45px}.eyebrow{font-size:10px;color:#006665;letter-spacing:2px;margin-bottom:12px;font-weight:600}h1{font-size:30px;font-weight:600;line-height:1.4;margin:0 0 15px;letter-spacing:-.6px}h2{font-size:21px;font-weight:550;margin:37px 0 15px;line-height:1.5}h3{font-size:16px;font-weight:550;margin:25px 0 12px}p{margin:11px 0 17px}blockquote{margin:24px 0;background:#edf4ec;border-left:3px solid #006665;padding:16px 20px;border-radius:0 8px 8px 0;color:#406247;font-size:13px}blockquote p{margin:0}.table-scroll{overflow-x:auto;border:1px solid #dfe5df;border-radius:9px;margin:17px 0 23px}table{width:100%;border-collapse:collapse;font-size:12px;line-height:1.9}th{text-align:left;background:#f2f7ed;color:#4e704d;font-weight:500;padding:12px 14px;border-bottom:1px solid #dfe5df}td{padding:13px 14px;border-bottom:1px solid #e5ebe0;vertical-align:top;min-width:100px}tr:last-child td{border-bottom:0}td:first-child{min-width:130px}tr:nth-child(even) td{background:#fcfdf8}ul,ol{padding-left:23px}li{margin:8px 0}code{background:#eef3e8;border-radius:4px;padding:2px 5px;font-size:12px;overflow-wrap:anywhere}pre{padding:17px 19px;border-radius:8px;background:#eef3e8;overflow:auto;font-size:12px}pre code{padding:0}strong{font-weight:600}.doc-footer{font-size:11px;line-height:1.9;color:#61716c;border-top:1px solid #dfe5df;padding-top:22px;margin-top:35px}.source-label{font-size:10px;color:#61716c;letter-spacing:.5px}.download{font-size:12px;padding:9px 14px;border:1px solid #006665;color:#006665;border-radius:8px;white-space:nowrap;display:inline-block}@media(max-width:900px){.layout{grid-template-columns:175px minmax(0,1fr);gap:20px;padding:25px 20px}main{padding:28px 27px}header small{display:none}}@media(max-width:650px){header{padding:14px 19px}.brand{font-size:20px}.layout{display:block;padding:20px 13px}nav{height:auto;position:static;display:flex;flex-wrap:wrap;gap:5px;padding:0;margin-bottom:18px}nav small{width:100%;margin:0 6px 5px}nav a{font-size:10px;padding:5px 8px;border:1px solid #dfe5df;margin:0}main{padding:25px 20px}h1{font-size:24px}h2{font-size:20px}.table-scroll{margin-left:-6px;margin-right:-6px}table{font-size:11px}td,th{padding:10px;min-width:120px}.download{font-size:10px}}@media(prefers-reduced-motion:reduce){html{scroll-behavior:auto}}@media print{header,nav{display:none}.layout{display:block;padding:0}body{background:white}main{border:0;padding:0}h2{break-after:avoid}tr{break-inside:avoid}}</style></head><body><header><div><span class="brand">点译</span> <small>点一下，读懂。 / v0.12.0</small></div><span class="source-label">CHROME / EDGE</span></header><div class="layout"><nav aria-label="文档目录"><small>CONTENTS / 目录</small><a href="#section-1">v0.8.0 已确认的原因</a><a href="#section-2">复现证据</a><a href="#section-3">推荐方案：本地结构骨架与片段译文组合</a><a href="#section-4">不选其他补法的原因</a><a href="#section-5">实施与验收范围</a></nav><main><div class="eyebrow">LINKS / 双语链接定位与改造</div><h1>双语译文链接丢失：定位与改造方案</h1>
+<p>2026-11-03 · v0.8.0 问题定位；已在 v0.9.0 实施为<a href="inline-structure.html">通用行内标签映射</a></p>
+<h2 id="section-1">v0.8.0 已确认的原因</h2>
+<p>段落原文的链接仍存在，新增的双语译文没有生成链接节点。问题发生在本地渲染阶段。</p>
+<div class="table-scroll"><table>
+<thead>
+<tr>
+<th>模式</th>
+<th>实际做法</th>
+<th>链接结果</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>双语普通段落</td>
+<td>将片段译文拼成字符串，创建新 span，通过 textContent 写入</td>
+<td>只有链接文案，没有 a 和 href</td>
+</tr>
+<tr>
+<td>仅译文</td>
+<td>将片段译文写入原 Text.data，原 a 元素保持不动</td>
+<td>地址、target 及原节点上的点击事件保留</td>
+</tr>
+<tr>
+<td>短导航等紧凑控件</td>
+<td>在原控件内部追加文字</td>
+<td>可借助外层原 a 保持可点击，不能据此判定普通段落也正常</td>
+</tr>
+</tbody>
+</table></div>
+<p>v0.8.0 代码定位：content/reader.js 的 render 在 178–180 行将整段文字传给 insertion；translationElement 的第 70 行执行 element.textContent = text。仅译文分支在 184–185 行直接更新 slot.node.data。收集阶段已经保留 slot.node，模型结果也已经有按 ID 对齐的 record.values，因此链接与译文的对应关系仍可利用。</p>
+<p>这同样解释了行内强调、代码等结构为什么在新增的整段译文中可能退化为普通文字。CSS 配色只能改变观感，不能为纯文字补回真正的链接节点。</p>
+<h2 id="section-2">复现证据</h2>
+<p>使用 v0.8.0 交付 ZIP 的原始文件，在隔离浏览器中加载一个段落，包含 URL 文案链接和“the guide”这类普通文案链接。本地固定响应服务完整返回片段，并故意倒序，验证现有 ID 对齐仍有效。一次真实 HTTP 请求即可复现。</p>
+<div class="table-scroll"><table>
+<thead>
+<tr>
+<th>检查</th>
+<th>实测</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>双语原文的可点击链接</td>
+<td>2 个，原节点和地址保留</td>
+</tr>
+<tr>
+<td>双语新增译文的可点击链接</td>
+<td>0 个，译文 HTML 完全是纯文字</td>
+</tr>
+<tr>
+<td>仅译文模式的链接</td>
+<td>2 个，原节点身份、地址和点击监听仍正常</td>
+</tr>
+<tr>
+<td>切回双语后</td>
+<td>再次为 0 个链接，新增模型请求为 0</td>
+</tr>
+</tbody>
+</table></div>
+<p>因此，片段翻译和切换复用都正常，缺口是双语段落没有还原行内结构。现有整页回归验证了原文链接和仅译文节点保留，没有断言双语新增译文本身包含可点击链接。</p>
+<p>复现命令：</p>
+<pre><code class="language-sh">node scripts/e2e.mjs tests/bilingual_links_diagnostic.py
+</code></pre>
+<p>该断言在 v0.8.0 因双语译文缺少链接而失败，属于已捕捉的缺陷；v0.9.0 同一复现已通过。历史机器记录：verification/bilingual-link-analysis-0.8.0.json；修复后记录：verification/bilingual-link-analysis-0.9.0.json。</p>
+<h2 id="section-3">推荐方案：本地结构骨架与片段译文组合</h2>
+<ol>
+<li><strong>保留来源结构。</strong> 继续利用 slot.node 和稳定片段 ID，在本地记录各片段所属的原链接及允许保留的行内标签。地址和 DOM 引用留在本地，不交给模型生成。</li>
+<li><strong>按片段生成译文节点。</strong> 用 record.values 填充对应 Text 节点，组合为 DocumentFragment；链接片段使用真实 a，连续属于同一个原链接的片段合成同一个链接。可以同时保留 strong、em、code、br 等受控结构。</li>
+<li><strong>目标地址取自原网页。</strong> 读取并检查原链接当前有效的 href，保留必要的 target、rel、title 等属性。原 URL 文案保持原样，普通链接文案可以翻译；不从翻译后的可见文字猜地址。</li>
+<li><strong>保持阅读设计。</strong> 译文继续按块追加、字号减 2px、无底色和侧线；链接沿用译文颜色，增加下划线及键盘焦点。独立导航仍沿用紧凑渲染，避免在已有 a 内再创建嵌套 a。</li>
+<li><strong>复用现有缓存。</strong> ShiyiPageMap 已保存逐片段 values、源节点路径及链接目标指纹。结构匹配的旧缓存可以结合当前 DOM 直接重绘，不需要为修复显示额外调用模型。源结构或链接已变更时，仍遵守原有严格匹配，不使用陈旧目标。</li>
+</ol>
+<p>普通有真实 href 的链接优先保持浏览器原生点击、组合键、中键和右键菜单行为。克隆节点不会复制 addEventListener 或属性方式绑定的点击处理，也可能制造重复 ID，因此需要受控地创建节点，不能直接克隆整个段落；依赖自定义点击／路由处理的链接要单独验证和适配。<a href="https://developer.mozilla.org/en-US/docs/Web/API/Node/cloneNode">Mozilla DOM 文档</a></p>
+<p>内容脚本和页面脚本的 JavaScript 环境相互隔离，因此不能假定能够读取并复用页面私有路由回调；对无法可靠复现行为的脚本控件，应保留原控件操作入口。<a href="https://developer.chrome.com/docs/extensions/develop/concepts/content-scripts">Chrome 内容脚本文档</a></p>
+<h2 id="section-4">不选其他补法的原因</h2>
+<div class="table-scroll"><table>
+<thead>
+<tr>
+<th>方法</th>
+<th>局限</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>把看起来像 URL 的译文用正则转链接</td>
+<td>无法恢复“指南”“点击这里”等文字背后的地址，也可能把标点或错误地址一起识别进去</td>
+</tr>
+<tr>
+<td>要求模型输出 HTML</td>
+<td>把结构和地址的正确性依赖于模型，并改变现有纯文本安全边界；增加输出内容，仍不能保证事件和路由保留</td>
+</tr>
+<tr>
+<td>整段 cloneNode(true) 后替换文字</td>
+<td>会复制不需要的属性、重复 ID 和控件；程序化事件监听不会随节点复制</td>
+</tr>
+</tbody>
+</table></div>
+<h2 id="section-5">实施与验收范围</h2>
+<p>主要调整 reader.js 的非紧凑双语渲染，必要时提取受控行内节点生成器，并在 content.css 补链接的下划线和焦点样式。无需改变翻译模型接口、批次大小、并发数或本地词库格式。只在确实需要处理缺少片段映射的旧记录时，使用该块的原文操作入口或单独重译该块，不清空词库或要求整页重译。</p>
+<p>验收须新增“双语译文本身可点击”的断言，并覆盖：</p>
+<ul>
+<li>URL 文案、普通链接文案、相对路径、绝对地址、页面锚点、一个链接内多个强调片段，以及同文案不同地址。</li>
+<li>普通点击、新标签打开、组合键／中键、键盘及右键复制链接地址；对脚本路由另行验证。</li>
+<li>双语／仅译文切换和刷新缓存后仍可点击，复用已有结果时新增请求为 0。</li>
+<li>恢复原文后，原节点、原事件、原 HTML 保持一致；不产生嵌套链接、重复 ID 或重复标记闪烁。</li>
+<li>页面改变或移除链接时不留下错误目标；模型文字始终按文字处理，不解析模型生成的 HTML 或事件属性。</li>
+</ul>
+<p>本方案已在 v0.9.0 扩展为通用行内标签映射并实现。复现测试已转绿，双语译文中的两个链接均可点击；嵌套标签、代码、font、原位升级与旧缓存重建另有 21 项专项验证。实现范围与事件边界见<a href="inline-structure.html">通用行内标签映射</a>。</p>
+<footer class="doc-footer">点译 v0.12.0 · 自己的模型，按块阅读<br>文档提供 HTML 阅读版及 Markdown 可编辑版本。</footer></main></div></body></html>

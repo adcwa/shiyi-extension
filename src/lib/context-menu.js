@@ -1,8 +1,10 @@
 import { PAGE_MATCHES } from './site-policy.js';
 
-export const MENU = Object.freeze({ root: 'shiyi', selection: 'shiyi-selection', page: 'shiyi-page', restore: 'shiyi-restore', site: 'shiyi-site', settings: 'shiyi-settings' });
+export const MENU = Object.freeze({ root: 'shiyi', summary: 'shiyi-summary', selection: 'shiyi-selection', page: 'shiyi-page', restore: 'shiyi-restore', site: 'shiyi-site', settings: 'shiyi-settings' });
+const summaryContexts = ['page', 'selection', 'link', 'image', 'video', 'audio'];
 export const menuItems = () => [
-  { id: MENU.root, title: '点译', contexts: ['page', 'selection'], documentUrlPatterns: [...PAGE_MATCHES] },
+  { id: MENU.root, title: '点译', contexts: [...summaryContexts], documentUrlPatterns: [...PAGE_MATCHES] },
+  { id: MENU.summary, parentId: MENU.root, title: '总结当前网页', contexts: [...summaryContexts] },
   { id: MENU.selection, parentId: MENU.root, title: '翻译选中文字', contexts: ['selection'] },
   { id: MENU.page, parentId: MENU.root, title: '翻译当前页面', contexts: ['page', 'selection'] },
   { id: MENU.restore, parentId: MENU.root, title: '恢复原文', contexts: ['page', 'selection'] },
@@ -26,11 +28,13 @@ export function createContextMenus(chromeApi, actions) {
       call('update', MENU.site, { checked: enabled, enabled: !!state?.supported && (!!state.permitted || !!state.blocked) }),
       call('update', MENU.selection, { enabled: enabled && !state.page?.active }),
       call('update', MENU.page, { enabled }),
+      call('update', MENU.summary, { enabled }),
       call('update', MENU.restore, { enabled: enabled && !!state.page?.active })
     ]);
   }
   async function click(info, tab) {
     if (!Number.isInteger(tab?.id)) return;
+    if (info.menuItemId === MENU.summary && (!info.frameId || info.frameId === 0)) return actions.summary(tab);
     if (info.menuItemId === MENU.settings) return actions.settings();
     const state = await actions.state(tab.id);
     if (!state?.supported) return;

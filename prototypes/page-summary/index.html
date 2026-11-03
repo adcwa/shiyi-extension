@@ -1,0 +1,33 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; font-src 'self'; connect-src 'none'; object-src 'none'; base-uri 'none'; form-action 'none'">
+  <title>点译 · 网页总结交互原型</title>
+  <link rel="icon" href="data:,">
+  <link rel="stylesheet" href="styles.css">
+  <script defer src="vendor.js"></script>
+  <script defer src="fixtures.js"></script>
+  <script defer src="stream.js"></script>
+  <script defer src="app.js"></script>
+</head>
+<body>
+  <div class="prototype-bar">
+    <div><strong>交互原型</strong><span class="prototype-note">示例内容与流式演示，不连接真实模型，请勿填写真实 Key</span></div>
+    <div class="prototype-tools"><label for="demo-scene">体验场景</label><select id="demo-scene"><option value="normal">正常总结</option><option value="first">首次配置</option><option value="quota">额度不足</option><option value="empty">空白网页</option><option value="changed">切换网页</option></select><button type="button" class="text-button" id="reset-demo">重置示例</button></div>
+  </div>
+  <header class="browser-toolbar">
+    <span class="browser-label">示例网页</span><div class="browser-address"><span id="address-text">reading.example/notes/streaming</span></div>
+    <button type="button" class="text-button" data-action="open-translation">翻译</button>
+    <button type="button" class="button small primary" data-action="open-summary" id="open-summary">总结网页</button>
+  </header>
+  <div class="workspace" id="workspace">
+    <main class="article-scroll" id="article-scroll" aria-label="当前网页原文"><article id="source-article"></article></main>
+    <aside class="side-panel" id="side-panel" aria-label="点译侧边栏"></aside>
+  </div>
+  <div id="selection-tools"></div><div id="word-tooltip"></div>
+  <div id="notice" class="notice" role="status" aria-live="polite" hidden></div>
+  <div id="export-menu" class="export-menu" popover></div>
+</body>
+</html>

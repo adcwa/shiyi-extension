@@ -3,5 +3,14 @@ node_modules/
 .test-profile/
 verification/*.log
 releases/
-docs/
+docs/*
+!docs/*.md
+!docs/*.html
+!docs/media/
+docs/media/*
+!docs/media/operations-2026-11-03.json
 verification/
+.impeccable/
+__pycache__/
+*.py[cod]
+prototypes/*.zip

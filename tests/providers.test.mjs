@@ -42,7 +42,8 @@ test('fresh setup selects a ready preset without treating the saved config as co
   assert.equal(draft.provider, 'deepseek'); assert.equal(draft.model, 'deepseek-flash'); assert.equal(draft.advancedOpen, false);
   const html = modelForm(draft, { ...DEFAULT_PROFILE, hasKey: false });
   assert.match(html, /连接并保存/); assert.match(html, /id="model-advanced" class="model-advanced" >/);
-  assert.equal((html.match(/ required/g) || []).length, 1);
+  assert.match(html, /id="model-key"[^>]* required/);
+  assert.match(html, /id="model-name"[^>]* required/);
 });
 test('legacy custom endpoints and model names remain intact on the new setup page', () => {
   const profile = { endpoint: 'https://company.example/v1/chat/completions', model: 'enterprise-model', name: 'Old connection', auth: 'bearer', timeoutSeconds: 25, hasKey: true };

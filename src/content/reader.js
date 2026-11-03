@@ -269,7 +269,7 @@
         if (!active || token !== generation) return;
         record.status = paused || error.code === 'CANCELLED' ? 'queued' : 'error';
         if (error.code !== 'CANCELLED') { lastError = error.message; lastCode = error.code || ''; }
-        if (['MODEL_NOT_CONFIGURED', 'MISSING_KEY', 'MODEL_PERMISSION', 'HTTP_401', 'HTTP_403', 'HTTP_429', 'SITE_DISABLED', 'DISCONNECTED'].includes(error.code)) { paused = true; cancelRequests(); }
+        if (error.connectionsExhausted || ['MODEL_NOT_CONFIGURED', 'MISSING_KEY', 'MODEL_PERMISSION', 'HTTP_401', 'HTTP_403', 'HTTP_429', 'SITE_DISABLED', 'DISCONNECTED'].includes(error.code)) { paused = true; cancelRequests(); }
       } finally { if (active && token === generation) emit(); }
     }
     async function translateRecords(batch, token) {
@@ -301,7 +301,7 @@
           if (['BLOCK_BATCH_FORMAT', 'BLOCK_ALIGNMENT', 'INVALID_RESULT', 'EMPTY_RESULT', 'RESULT_TOO_LARGE', 'TIMEOUT'].includes(error.code)) record.singleOnly = true;
         });
         if (error.code !== 'CANCELLED') { lastError = error.message; lastCode = error.code || ''; }
-        if (['MODEL_NOT_CONFIGURED', 'MISSING_KEY', 'MODEL_PERMISSION', 'HTTP_401', 'HTTP_403', 'HTTP_429', 'SITE_DISABLED', 'DISCONNECTED'].includes(error.code)) { paused = true; cancelRequests(); }
+        if (error.connectionsExhausted || ['MODEL_NOT_CONFIGURED', 'MISSING_KEY', 'MODEL_PERMISSION', 'HTTP_401', 'HTTP_403', 'HTTP_429', 'SITE_DISABLED', 'DISCONNECTED'].includes(error.code)) { paused = true; cancelRequests(); }
       } finally { requests.delete(requestId); if (active && token === generation) emit(); }
     }
     function cancelRequests() { for (const requestId of requests) bridge.send('CANCEL', { requestId }).catch(() => {}); requests.clear(); }
@@ -487,7 +487,8 @@
       return status();
     }
     function clearSaved() { cachedCount = 0; restoredCount = 0; pageHandle = null; writerReady = false; emit(); }
-    return Object.freeze({ status, start, restore, stop, command, selectedOwners, refreshAppearance: updateTheme, restoreCached, clearSaved });
+    const sourceText = node => { const slot = originals.get(node); return slot?.applied !== undefined && node.data === slot.applied ? slot.source : node.data; };
+    return Object.freeze({ status, start, restore, stop, command, selectedOwners, refreshAppearance: updateTheme, restoreCached, clearSaved, sourceText });
   }
   globalThis.ShiyiReader = Object.freeze({ create, ownerOf, selectedOwners, insertion, translationTheme });
 })();

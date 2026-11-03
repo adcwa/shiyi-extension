@@ -107,7 +107,7 @@ try:
             assert current_storage == old_storage and value['prefs']['batchSize'] == 32
             assert message(ui, 'LIBRARY')['entries'][0]['translation'] == '迁移'
             manifest = ui.evaluate('()=>chrome.runtime.getManifest()')
-            assert manifest['name'] == '点译 · 划词与整页翻译' and manifest['version'] == VERSION, manifest
+            assert manifest['name'] == '点译 · 翻译与网页总结' and manifest['version'] == VERSION, manifest
             db_version = ui.evaluate('()=>new Promise(resolve=>{const r=indexedDB.open("shiyi-vocabulary");r.onsuccess=()=>{resolve(r.result.version);r.result.close()}})')
             assert db_version == 2, {'database_version': db_version, 'state_fields': list(value)}
             passed('Archived v0.5.1 upgrades in the same install path and profile: extension ID, glossary, model, preferences and credential remain intact; database migrates from v1 to v2')

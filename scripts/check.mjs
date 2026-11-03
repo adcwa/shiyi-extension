@@ -10,7 +10,10 @@ for (const full of await walk(path.join(root, 'src'))) {
   if (full.endsWith('.js')) {
     const result = spawnSync(process.execPath, ['--check', full], { encoding: 'utf8' });
     if (result.status !== 0) throw new Error(result.stderr);
-    for (const match of source.matchAll(/\bfrom\s+['"]([^'"]+)['"]|\bimport\s+['"]([^'"]+)['"]/g)) {
+    // The bundled renderer contains user-facing grammar examples such as
+    // `from "..."`; it is one IIFE with no runtime imports (esbuild bundles it).
+    const imports = full.includes(`${path.sep}vendor${path.sep}`) ? [] : source.matchAll(/\bfrom\s+['"]([^'"]+)['"]|\bimport\s+['"]([^'"]+)['"]/g);
+    for (const match of imports) {
       const target = match[1] || match[2]; if (!target.startsWith('.')) throw new Error(`Unexpected runtime dependency: ${target}`);
       await fs.access(path.resolve(path.dirname(full), target));
     }

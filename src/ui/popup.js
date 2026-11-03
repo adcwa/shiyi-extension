@@ -1,8 +1,14 @@
 import { LANGUAGES, STYLES } from '../lib/core.js';
 import { api, brand, esc, icon, languageOptions, notify, requestHost } from './common.js';
+import { SUMMARY_PRESETS } from '../lib/summary-presets.js';
+import { hasUsableConnection } from '../lib/connections.js';
 
 const root = document.getElementById('popup'); root.style.cssText = 'padding:0';
 let state, tabId, busy = false, pageMode = 'bilingual', polling = false;
+function summarySection() {
+  const profile = state.summaryProfile, ready = hasUsableConnection(state, 'summary');
+  return `<section class="popup-section summary-section"><div class="page-heading"><strong>${icon('spark')}网页总结</strong><button class="link-btn" data-open="summary">总结设置</button></div><label class="sr-only" for="summary-preset">总结方式</label><select class="input" id="summary-preset">${Object.entries(SUMMARY_PRESETS).map(([key, value]) => `<option value="${key}" ${state.summaryPrefs.preset === key ? 'selected' : ''}>${value.name}</option>`).join('')}</select><button class="btn primary page-start" id="summarize-page" ${state.tab?.supported && state.tab?.enabled ? '' : 'disabled'}>${icon('spark')}${ready ? '总结当前网页' : '连接总结模型'}</button><p class="page-note">${ready ? esc(profile.model) + ' · 侧栏流式显示' : '独立配置，不影响现有翻译模型'}</p></section>`;
+}
 async function load() {
   state = await api('UI_STATE', { tabId }); if (state.tab?.page?.active) pageMode = state.tab.page.mode; render();
 }
@@ -25,8 +31,8 @@ function updatePageView() {
 function render() {
   root.className = '';
   const tab = state.tab, on = !!tab?.enabled;
-  const ready = !!state.profile.endpoint && !!state.profile.model && (state.profile.auth === 'none' || state.profile.hasKey);
-  root.innerHTML = `<header class="popup-head">${brand()}<span class="tag">当前网页</span><button class="icon-btn" data-open="translation" aria-label="打开偏好设置">${icon('settings')}</button></header>${pageSection(ready)}<section class="popup-section"><div class="site-row"><div><strong>${esc(tab?.origin ? new URL(tab.origin).host : '浏览器受限页面')}</strong><p><span class="dot"></span>${!tab?.supported ? '当前页面不支持' : tab.blocked ? '黑名单中已停用' : on ? '默认开启 · 可直接划词' : '需要浏览器网站权限'}</p></div><button class="switch" role="switch" aria-checked="${on}" aria-label="在此网站启用点译" id="site-switch" ${tab?.supported && (tab.permitted || tab.blocked) ? '' : 'disabled'}></button></div>${tab?.blocked ? `<div class="status-box">已按黑名单规则 ${esc(tab.blockingSite)} 停用。<button class="btn primary" id="enable-site">恢复此网站</button></div>` : tab?.supported && !tab.permitted ? '<div class="status-box">浏览器尚未允许点译访问此网站。<button class="btn primary" id="website-access">允许网站访问</button></div>' : ''}<button class="popup-secondary" data-open="sites">管理网站黑名单</button></section><section class="popup-section"><label class="popup-field" for="target-language"><span>翻译为</span><select class="popup-select" id="target-language">${languageOptions(LANGUAGES, state.prefs.targetLanguage)}</select></label><span class="popup-label">短词释义显示</span><div class="segmented" role="group" aria-label="释义显示方式">${[['hover', 'hover', '悬浮释义'], ['inline', 'inline', '括号释义']].map(([value, glyph, label]) => `<button data-mode="${value}" class="${state.prefs.displayMode === value ? 'active' : ''}" aria-pressed="${state.prefs.displayMode === value}">${icon(glyph)}${label}</button>`).join('')}</div><span class="popup-label">翻译风格 ${state.prefs.style === 'custom' ? '<span class="tag green">当前使用自定义</span>' : ''}</span><div class="style-pills" role="group" aria-label="翻译风格">${['regular', 'professional', 'humorous'].map(value => `<button data-style="${value}" class="${state.prefs.style === value ? 'active' : ''}" aria-pressed="${state.prefs.style === value}">${STYLES[value]}</button>`).join('')}</div></section><section class="popup-section"><div class="model-row"><div class="model-avatar">${icon('cpu')}</div><div><strong>${esc(state.profile.name || '还没有连接翻译模型')}</strong><small>${ready ? esc(state.profile.model) : state.profile.endpoint && !state.profile.hasKey && state.profile.auth !== 'none' ? '需要重新填写会话密钥' : '连接自己的模型后，开始划词翻译'}</small></div><button class="link-btn" data-open="model">${ready ? '设置' : '配置'} ${icon('up')}</button></div><button class="open-library" data-open="library"><span>${icon('library')}打开我的词句库</span><span><small>${state.count} 条</small>${icon('arrow')}</span></button></section><footer class="popup-footer">${icon('shield')}词库保存在本地 · 模型仅接收确认翻译的内容</footer>`;
+  const ready = hasUsableConnection(state, 'translation');
+  root.innerHTML = `<header class="popup-head">${brand()}<span class="tag">当前网页</span><button class="icon-btn" data-open="translation" aria-label="打开偏好设置">${icon('settings')}</button></header>${summarySection()}${pageSection(ready)}<section class="popup-section"><div class="site-row"><div><strong>${esc(tab?.origin ? new URL(tab.origin).host : '浏览器受限页面')}</strong><p><span class="dot"></span>${!tab?.supported ? '当前页面不支持' : tab.blocked ? '黑名单中已停用' : on ? '默认开启 · 可直接划词' : '需要浏览器网站权限'}</p></div><button class="switch" role="switch" aria-checked="${on}" aria-label="在此网站启用点译" id="site-switch" ${tab?.supported && (tab.permitted || tab.blocked) ? '' : 'disabled'}></button></div>${tab?.blocked ? `<div class="status-box">已按黑名单规则 ${esc(tab.blockingSite)} 停用。<button class="btn primary" id="enable-site">恢复此网站</button></div>` : tab?.supported && !tab.permitted ? '<div class="status-box">浏览器尚未允许点译访问此网站。<button class="btn primary" id="website-access">允许网站访问</button></div>' : ''}<button class="popup-secondary" data-open="sites">管理网站黑名单</button></section><section class="popup-section"><label class="popup-field" for="target-language"><span>翻译为</span><select class="popup-select" id="target-language">${languageOptions(LANGUAGES, state.prefs.targetLanguage)}</select></label><span class="popup-label">短词释义显示</span><div class="segmented" role="group" aria-label="释义显示方式">${[['hover', 'hover', '悬浮释义'], ['inline', 'inline', '括号释义']].map(([value, glyph, label]) => `<button data-mode="${value}" class="${state.prefs.displayMode === value ? 'active' : ''}" aria-pressed="${state.prefs.displayMode === value}">${icon(glyph)}${label}</button>`).join('')}</div><span class="popup-label">翻译风格 ${state.prefs.style === 'custom' ? '<span class="tag green">当前使用自定义</span>' : ''}</span><div class="style-pills" role="group" aria-label="翻译风格">${['regular', 'professional', 'humorous'].map(value => `<button data-style="${value}" class="${state.prefs.style === value ? 'active' : ''}" aria-pressed="${state.prefs.style === value}">${STYLES[value]}</button>`).join('')}</div></section><section class="popup-section"><div class="model-row"><div class="model-avatar">${icon('cpu')}</div><div><strong>${esc(state.profile.name || '还没有连接翻译模型')}</strong><small>${ready ? esc(state.profile.model) : state.profile.endpoint && !state.profile.hasKey && state.profile.auth !== 'none' ? '需要重新填写会话密钥' : '连接自己的模型后，开始划词翻译'}</small></div><button class="link-btn" data-open="model">${ready ? '设置' : '配置'} ${icon('up')}</button></div><button class="open-library" data-open="library"><span>${icon('library')}打开我的词句库</span><span><small>${state.count} 条</small>${icon('arrow')}</span></button></section><footer class="popup-footer">${icon('shield')}词库保存在本地 · 点击后才请求模型</footer>`;
   updatePageView();
 }
 async function action(task, target) {
@@ -40,10 +46,20 @@ async function setSiteEnabled(enabled) {
 }
 root.addEventListener('click', event => {
   const button = event.target.closest('button'); if (!button) return;
+  if (button.id === 'summarize-page') {
+    const ready = hasUsableConnection(state, 'summary');
+    if (!ready) { api('OPEN_OPTIONS', { section: 'summary' }).then(() => window.close()).catch(error => notify(error.message)); return; }
+    const preset = document.getElementById('summary-preset').value;
+    button.disabled = true;
+    // Dispatch while this gesture is active. The background owns the open/start
+    // chain because Chrome closes this popup as soon as the side panel opens.
+    api('SUMMARY_OPEN', { tabId, preset }).then(() => window.close()).catch(error => { notify(error.message); button.disabled = false; });
+    return;
+  }
   if (button.dataset.open) { api('OPEN_OPTIONS', { section: button.dataset.open }).then(() => window.close()).catch(error => notify(error.message)); return; }
   if (button.id === 'page-translate') {
     action(async () => {
-      const ready = state.profile.endpoint && state.profile.model && (state.profile.auth === 'none' || state.profile.hasKey);
+      const ready = hasUsableConnection(state, 'translation');
       if (!ready) { await api('OPEN_OPTIONS', { section: 'model' }); return; }
       if (state.tab.blocked) await setSiteEnabled(true);
       await api('PAGE_COMMAND', { tabId, action: 'translate', mode: pageMode });

@@ -1,16 +1,25 @@
 {
   "name": "dianyi-extension",
-  "version": "0.9.1",
+  "version": "0.12.0",
   "private": true,
   "type": "module",
-  "description": "点译：本地词库与自定义模型划词翻译",
+  "description": "点译：自有模型按需翻译，已存词句跨网页主动提示",
   "scripts": {
     "build": "node scripts/build.mjs",
     "test": "node --test tests/*.test.mjs",
     "check": "node scripts/check.mjs",
     "test:e2e": "node scripts/e2e.mjs",
     "test:page": "node scripts/e2e.mjs tests/page_translation_e2e.py",
-    "test:long": "node scripts/e2e.mjs tests/long_text_regression.py"
+    "test:long": "node scripts/e2e.mjs tests/long_text_regression.py",
+    "build:renderers": "node scripts/build-renderers.mjs"
   },
-  "engines": { "node": ">=20" }
+  "engines": {
+    "node": ">=20"
+  },
+  "devDependencies": {
+    "markdown-it": "15.0.3",
+    "mermaid": "12.2.0",
+    "katex": "0.19.1",
+    "esbuild": "0.28.2"
+  }
 }

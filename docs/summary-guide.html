@@ -1,0 +1,160 @@
+<!doctype html><html lang="zh-CN"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>点译 v0.12.0 · 网页总结</title><style>*{box-sizing:border-box}html{scroll-behavior:smooth;scroll-padding-top:90px}body{margin:0;background:#f5f5f0;color:#263735;font:14px/1.95 -apple-system,BlinkMacSystemFont,"Segoe UI","PingFang SC",sans-serif}a{color:#006665;text-decoration:none}a:hover{text-decoration:underline}header{padding:18px 30px;position:sticky;top:0;background:#fbfcf8ef;border-bottom:1px solid #dfe5df;backdrop-filter:blur(10px);display:flex;align-items:center;justify-content:space-between;gap:18px;z-index:5}.brand{font-size:23px;font-weight:650;letter-spacing:2px}header small{font-size:11px;color:#61716c;letter-spacing:.7px}.layout{max-width:1400px;display:grid;grid-template-columns:218px minmax(0,1fr);gap:30px;margin:auto;padding:35px 30px 60px}nav{position:sticky;top:105px;height:calc(100vh - 130px);overflow:auto;padding-right:12px}nav small{display:block;font-size:10px;letter-spacing:1.6px;color:#61716c;margin:0 10px 15px}nav a{display:block;padding:8px 10px;margin:3px 0;border-radius:7px;color:#61716c;font-size:12px}nav a:hover{background:#eaf3ee;text-decoration:none;color:#006665}main{min-width:0;border:1px solid #dfe5df;border-radius:13px;background:#fff;padding:37px 43px 45px}.eyebrow{font-size:10px;color:#006665;letter-spacing:2px;margin-bottom:12px;font-weight:600}h1{font-size:30px;font-weight:600;line-height:1.4;margin:0 0 15px;letter-spacing:-.6px}h2{font-size:21px;font-weight:550;margin:37px 0 15px;line-height:1.5}h3{font-size:16px;font-weight:550;margin:25px 0 12px}p{margin:11px 0 17px}blockquote{margin:24px 0;background:#edf4ec;border-left:3px solid #006665;padding:16px 20px;border-radius:0 8px 8px 0;color:#406247;font-size:13px}blockquote p{margin:0}.table-scroll{overflow-x:auto;border:1px solid #dfe5df;border-radius:9px;margin:17px 0 23px}table{width:100%;border-collapse:collapse;font-size:12px;line-height:1.9}th{text-align:left;background:#f2f7ed;color:#4e704d;font-weight:500;padding:12px 14px;border-bottom:1px solid #dfe5df}td{padding:13px 14px;border-bottom:1px solid #e5ebe0;vertical-align:top;min-width:100px}tr:last-child td{border-bottom:0}td:first-child{min-width:130px}tr:nth-child(even) td{background:#fcfdf8}ul,ol{padding-left:23px}li{margin:8px 0}code{background:#eef3e8;border-radius:4px;padding:2px 5px;font-size:12px;overflow-wrap:anywhere}pre{padding:17px 19px;border-radius:8px;background:#eef3e8;overflow:auto;font-size:12px}pre code{padding:0}strong{font-weight:600}.doc-footer{font-size:11px;line-height:1.9;color:#61716c;border-top:1px solid #dfe5df;padding-top:22px;margin-top:35px}.source-label{font-size:10px;color:#61716c;letter-spacing:.5px}.download{font-size:12px;padding:9px 14px;border:1px solid #006665;color:#006665;border-radius:8px;white-space:nowrap;display:inline-block}@media(max-width:900px){.layout{grid-template-columns:175px minmax(0,1fr);gap:20px;padding:25px 20px}main{padding:28px 27px}header small{display:none}}@media(max-width:650px){header{padding:14px 19px}.brand{font-size:20px}.layout{display:block;padding:20px 13px}nav{height:auto;position:static;display:flex;flex-wrap:wrap;gap:5px;padding:0;margin-bottom:18px}nav small{width:100%;margin:0 6px 5px}nav a{font-size:10px;padding:5px 8px;border:1px solid #dfe5df;margin:0}main{padding:25px 20px}h1{font-size:24px}h2{font-size:20px}.table-scroll{margin-left:-6px;margin-right:-6px}table{font-size:11px}td,th{padding:10px;min-width:120px}.download{font-size:10px}}@media(prefers-reduced-motion:reduce){html{scroll-behavior:auto}}@media print{header,nav{display:none}.layout{display:block;padding:0}body{background:white}main{border:0;padding:0}h2{break-after:avoid}tr{break-inside:avoid}}</style></head><body><header><div><span class="brand">点译</span> <small>点一下，读懂。 / v0.12.0</small></div><span class="source-label">CHROME / EDGE</span></header><div class="layout"><nav aria-label="文档目录"><small>CONTENTS / 目录</small><a href="#section-1">开始使用</a><a href="#section-2">独立模型与提示词</a><a href="#section-3">场景与请求次数</a><a href="#section-4">正文范围与原文保护</a><a href="#section-5">流式阅读与恢复</a><a href="#section-6">复制与导出</a><a href="#section-7">本地渲染与隐私</a><a href="#section-8">验证证据与边界</a></nav><main><div class="eyebrow">网页总结使用说明</div><h1>点译 v0.10.0 · 网页总结</h1>
+<p>2026-11-03 · 正式可安装插件功能</p>
+<p>用自己配置的通用对话模型总结当前网页，在原生浏览器侧栏阅读流式结果。网页保留当前原文或译文显示方式；总结不逐句翻译，也不写入词句库。早期 <code>prototypes/page-summary/</code> 是固定示例原型，本文说明正式插件。</p>
+<h2 id="section-1">开始使用</h2>
+<ol>
+<li>安装 <code>dianyi-chrome-edge-0.10.0.zip</code> 解压后的扩展，名称为“点译 · 翻译与网页总结”。首次安装步骤见随包安装与使用指南。</li>
+<li>点击工具栏点译图标，在最上方的“网页总结”点击“总结设置”，单独连接总结模型。</li>
+<li>回到普通 HTTP(S) 网页，等待正文加载。弹窗选择总结方式后点击“总结当前网页”，或右键“点译 → 总结当前网页”使用已保存的默认方式。</li>
+<li>原生侧栏打开并逐步显示内容。可停止、重新总结、复制全文、导出文档，或切到“制品”集中查看代码、表格、图形和公式。</li>
+</ol>
+<p>侧栏只承载总结内容、状态和制品操作，不放模型设置、提示词表单、翻译或词库。翻译与设置保留原入口：翻译连接为 <code>options.html#model</code>，总结配置为 <code>options.html#summary</code>。当前网页在黑名单中或浏览器未允许访问时，总结不能绕过限制；从原网站开关或浏览器权限恢复后再使用。</p>
+<h2 id="section-2">独立模型与提示词</h2>
+<p>总结设置支持常用厂家推荐型号、“其他模型（手动填写）”及自定义 Chat Completions 兼容服务。远端地址需 HTTPS，本机回环服务可 HTTP；无鉴权本机模型可选择“无需密钥”。总结服务需支持 SSE 流式响应。</p>
+<div class="table-scroll"><table>
+<thead>
+<tr>
+<th>项目</th>
+<th>总结</th>
+<th>翻译</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>设置入口</td>
+<td>总结设置</td>
+<td>原模型连接</td>
+</tr>
+<tr>
+<td>千问默认型号</td>
+<td><code>qwen-flash</code>，通用对话</td>
+<td><code>qwen-mt-flash</code>，专用翻译</td>
+</tr>
+<tr>
+<td>凭据</td>
+<td>独立总结 Key</td>
+<td>原翻译 Key</td>
+</tr>
+<tr>
+<td>默认保存</td>
+<td>本次浏览器会话</td>
+<td>本次浏览器会话</td>
+</tr>
+<tr>
+<td>长期保存</td>
+<td>单独明确勾选本机记住</td>
+<td>单独明确勾选本机记住</td>
+</tr>
+<tr>
+<td>请求正文</td>
+<td>当前页主要可见正文</td>
+<td>用户确认的选区或翻译块</td>
+</tr>
+</tbody>
+</table></div>
+<p>两者即使使用同一厂家和端点也不串用 Key，清除总结密钥不影响翻译密钥。切换厂家或地域会清空尚未保存的 Key。总结拒绝 <code>qwen-mt-*</code> 型号，避免把翻译专用模型用于分析。连接测试发送固定短文验证真实流式响应，可能使用少量额度，不发送当前网页。</p>
+<p>可设默认场景，分别编辑通用、技术、新闻、专业及调研提示词，每项最多 6000 字符，可恢复预设。保存只用于下一次总结，不自动重跑旧结果。高级设置的“无响应超时”支持 5／10／20／25 秒，指连续收不到响应的时长；流式输出持续到达时会刷新该计时。</p>
+<h2 id="section-3">场景与请求次数</h2>
+<div class="table-scroll"><table>
+<thead>
+<tr>
+<th>场景</th>
+<th>用途</th>
+<th>正常请求数</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>自动识别</td>
+<td>先识别主题与类型，再选对应提示词生成</td>
+<td>2 次：分类一次、流式总结一次</td>
+</tr>
+<tr>
+<td>通用总结</td>
+<td>核心观点、依据、结论与必要限制</td>
+<td>1 次</td>
+</tr>
+<tr>
+<td>技术总结</td>
+<td>问题、原理、步骤、接口／代码与局限</td>
+<td>1 次</td>
+</tr>
+<tr>
+<td>新闻总结</td>
+<td>事件、人物、时间地点、事实与各方立场</td>
+<td>1 次</td>
+</tr>
+<tr>
+<td>专业分析</td>
+<td>判断、证据链、概念、风险与边界</td>
+<td>1 次</td>
+</tr>
+<tr>
+<td>调研分析</td>
+<td>网页中方案／观点的比较、证据与待验证问题</td>
+<td>1 次</td>
+</tr>
+</tbody>
+</table></div>
+<p>输出使用简体中文 Markdown。自动识别只使用本次正文前 10,000 字符以内的摘录；分类结果不完整或类型无效时，显示说明并使用通用总结。连接或账户错误不会触发自动重试。选择场景、保存提示词、复制、导出、切换视图与重开侧栏都不请求模型；主动重新总结会再次读取网页并使用额度。</p>
+<p>“调研分析”也只基于当前网页，不搜索其他网页，不补造来源、数字或结论。网页中的命令或角色声明作为待分析资料处理，不能替代总结指令。模型仍可能理解有误，关键结论应回到来源核对。</p>
+<h2 id="section-4">正文范围与原文保护</h2>
+<p>优先提取主文档的 <code>article</code>、<code>main</code>／主内容区域，缺少这些结构时读取页面可读内容。仅处理已加载、主要可见的正文，保留正文代码、列表和表格；排除表单输入值、可编辑区域、隐藏内容、导航、侧边栏及插件自身界面。不会自动滚动加载后续内容。浏览器内部页、扩展商店、内置 PDF、图片／Canvas 文字、iframe 和 Shadow DOM 暂不支持。</p>
+<p>当前处于“仅译文”模式时，提取插件保存的原始文字，而不是把译文再次作为来源。总结不改写网页，也不切换翻译显示模式。与整页翻译跳过代码块不同，总结将主要正文中的代码和表格视为分析资料。</p>
+<p>最多纳入前 60,000 字符；超过范围或提取节点预算时，侧栏明确显示截取提示，不把部分内容说成全文。来源标题与域名用于侧栏说明，正文请求不附加页面 URL、Cookie 或表单值。正文中本来可见的信息，包括代码，会发送给用户配置的总结服务。</p>
+<h2 id="section-5">流式阅读与恢复</h2>
+<ul>
+<li>生成时显示读取、识别主题或生成状态；点击“停止”中断实际请求并保留已收到的内容。断线、超时和服务错误同样保留部分结果，提供主动重新总结路径。</li>
+<li>单任务最长 3 分钟，输出最多 8 万字符；达到边界会停止并说明现有结果未完整完成。无响应超时与整个任务时限分别计算。</li>
+<li>向上阅读时不强制跳回底部，点击“有新内容 · 回到底部”恢复跟随。正文与制品视图保留各自的阅读位置。</li>
+<li>刷新或切换来源会停止旧任务、标注旧结果，不自动对新页面请求；需要新内容时点击“重新总结”。未加载或后来改写的内容不会在后台自动追加请求。</li>
+<li>本次浏览器会话最多暂存最近 8 页。关闭再打开侧栏只读取暂存，不请求模型；完全退出浏览器后不承诺保留，关闭来源标签页会移除该页记录。需要长期保留时主动导出。</li>
+</ul>
+<p>原生侧栏高度随浏览器窗口，宽度可通过浏览器分隔线调整，上下界由浏览器决定。内容已在 320／390／600px 宽度验证；物理拖动尚未完成自动化确认。原生关闭控件也由浏览器提供。</p>
+<h2 id="section-6">复制与导出</h2>
+<div class="table-scroll"><table>
+<thead>
+<tr>
+<th>内容</th>
+<th>复制内容</th>
+<th>导出格式</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>全文总结</td>
+<td>Markdown，含来源和完成状态</td>
+<td><code>.md</code>、独立无脚本 <code>.html</code></td>
+</tr>
+<tr>
+<td>代码</td>
+<td>原始代码</td>
+<td>按语言为 <code>.js</code>、<code>.ts</code>、<code>.py</code> 等，未知类型为 <code>.txt</code></td>
+</tr>
+<tr>
+<td>表格</td>
+<td>Markdown 源码</td>
+<td><code>.md</code>、<code>.csv</code></td>
+</tr>
+<tr>
+<td>Mermaid 图</td>
+<td>Mermaid 源码</td>
+<td><code>.mmd</code>、<code>.svg</code></td>
+</tr>
+<tr>
+<td>公式</td>
+<td>LaTeX 源码</td>
+<td><code>.tex</code></td>
+</tr>
+</tbody>
+</table></div>
+<p>停止、错误或截取后的导出明确标识部分结果。全文文档带去除查询参数和锚点的来源地址；不导出 Key 或鉴权头。CSV 对以公式触发字符开头的单元格添加保护，避免直接按公式执行。HTML 代码制品按文本处理，不输出可运行 HTML 文件；全文 HTML 是阅读文档，无脚本或远程资源。没有 Word 导出或交互图表运行环境。</p>
+<p>代码围栏未闭合时先按源码显示；完整的代码、表格、Mermaid 和公式才进入相应制品。图形预览失败仍保留源码，可复制或导出，不执行模型返回的网页脚本。</p>
+<h2 id="section-7">本地渲染与隐私</h2>
+<p>渲染器随安装包本地分发，使用 markdown-it 15.0.3、Mermaid 12.2.0、KaTeX 0.19.1；没有 CDN 或远程字体。Markdown 原始 HTML 关闭，Mermaid 为 strict 且清理 SVG，公式使用 <code>trust: false</code> 和 MathML。Mermaid 依赖中的动态 CSV 编译已改为静态转换，满足 MV3 严格脚本策略。</p>
+<p>模型调用在扩展后台执行，侧栏不直接访问模型服务，不持有明文凭据。总结与翻译凭据使用独立存储记录；默认会话保存，明确记住才写本机长期存储。这不是加密保险箱。结果和词库不上传点译服务器，也不使用追踪服务。</p>
+<h2 id="section-8">验证证据与边界</h2>
+<p><code>verification/summary-0.10.0.json</code> 记录 19 项通过检查，使用未修改的解压 ZIP、隔离浏览器和真实本地 HTTP/SSE 服务。覆盖独立连接与提示词、自动 2 次／手动 1 次请求、增量输出、原文提取、制品渲染与下载、复制、无脚本文档、停止及断线、403 诊断、截取、导航、黑名单、独立 Key 和侧栏重开不请求。</p>
+<p>Chrome 工具栏入口与网页右键已实际点击，工具栏弹窗自动关闭后仍由后台完成打开与生成；截图见 <code>verification/summary-native-open.png</code>。布局与制品截图为 <code>verification/summary-320.png</code>、<code>summary-390.png</code>、<code>summary-600.png</code>、<code>summary-artifacts.png</code>。</p>
+<p>这些检查不使用真实付费厂家 Key，不评价真实账户授权、额度或总结语义质量。本机无原生 Edge 二进制，Edge 仅声明同一 MV3 目标包，尚未实际安装；物理拖动侧栏宽度的自动化确认仍未完成。项目另有 HTML／Markdown 验收记录与架构说明，可核对更完整的版本证据。</p>
+<footer class="doc-footer">点译 v0.12.0 · 自己的模型，按块阅读<br>文档提供 HTML 阅读版及 Markdown 可编辑版本。</footer></main></div></body></html>
