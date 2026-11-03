@@ -6,7 +6,8 @@ import { runConnections } from './connections.js';
 
 const activePhases = new Set(['extracting', 'classifying', 'streaming']);
 export function createSummaryManager({ chromeApi, settings, tabState, permissionGranted }) {
-  const states = new Map(), jobs = new Map(), ports = new Set(), launches = new Map(), notifications = new Map(); let persistTail = Promise.resolve(), saveTimer;
+  const states = new Map(), jobs = new Map(), ports = new Set(), launches = new Map(), notifications = new Map(), automatic = new Map(), revisions = new Map(); let persistTail = Promise.resolve(), saveTimer;
+  const revise = tabId => revisions.set(tabId, (revisions.get(tabId) || 0) + 1);
   const loaded = chromeApi.storage.session.get('summaryResults').then(async ({ summaryResults = [] }) => {
     for (const saved of summaryResults.slice(-8)) if (Number.isInteger(saved.tabId)) {
       const { sourceURL, ...value } = saved;
@@ -32,11 +33,12 @@ export function createSummaryManager({ chromeApi, settings, tabState, permission
   }
   async function snapshot(tabId) { await loaded; return publicState(states.get(tabId)); }
   function stop(tabId, reason = '生成已停止，已保留收到的内容。', keepLaunch = false) {
-    if (!keepLaunch) launches.delete(tabId);
+    if (!keepLaunch) { launches.delete(tabId); automatic.delete(tabId); revise(tabId); }
     const job = jobs.get(tabId); if (!job) return;
     jobs.delete(tabId); job.controller.abort(); update(tabId, { phase: 'stopped', error: reason }, true);
   }
   async function start(tabId, requestedPreset) {
+    revise(tabId);
     const launch = crypto.randomUUID(); launches.set(tabId, launch);
     await loaded;
     assert(Number.isInteger(tabId), 'INVALID_INPUT', '请选择需要总结的网页。');
@@ -81,18 +83,37 @@ export function createSummaryManager({ chromeApi, settings, tabState, permission
     })();
     return { started: true, id };
   }
-  function connect(port) {
+  function ensure(tabId, requestedPreset) {
+    if (automatic.has(tabId)) return automatic.get(tabId);
+    const revision = revisions.get(tabId);
+    const task = (async () => {
+      await loaded;
+      const tab = await chromeApi.tabs.get(tabId), identity = await digest(tab.url || '');
+      if (revisions.get(tabId) !== revision) return { started: false };
+      const previous = states.get(tabId);
+      // Reopening, reconnecting, and duplicate open/bind events share one job.
+      // Errors and user-stopped output require an explicit retry, never a loop.
+      if (previous && previous.sourceIdentity === identity && !previous.stale && (!requestedPreset || previous.preset === requestedPreset)) return { started: false, reused: true };
+      return start(tabId, requestedPreset || previous?.preset);
+    })();
+    automatic.set(tabId, task);
+    const clear = () => { if (automatic.get(tabId) === task) automatic.delete(tabId); };
+    task.then(clear, clear);
+    return task;
+  }
+  function connect(port, boundTabId) {
     ports.add(port);
     port.onMessage.addListener(async message => {
-      if (message?.type === 'bind' && Number.isInteger(message.tabId)) { port.summaryTab = message.tabId; await loaded; publish(message.tabId); }
+      if (message?.type === 'bind' && message.tabId === boundTabId) { port.summaryTab = boundTabId; await loaded; publish(boundTabId); }
     });
     port.onDisconnect.addListener(() => ports.delete(port));
   }
-  function cancelAll(reason) { launches.clear(); for (const tabId of jobs.keys()) stop(tabId, reason); }
-  function invalidate(tabId) {
-    const changedAt = Date.now(); launches.delete(tabId); stop(tabId, '来源网页已刷新或切换，旧任务已停止。请对当前网页重新总结。');
-    loaded.then(() => { const state = states.get(tabId); if (state && state.updatedAt <= changedAt) update(tabId, { stale: true }, true); }).catch(() => {});
+  function cancelAll(reason) { for (const tabId of new Set([...launches.keys(), ...automatic.keys(), ...jobs.keys()])) stop(tabId, reason); }
+  function invalidate(tabId, reason = '来源网页已刷新或切换，旧任务已停止。') {
+    stop(tabId, reason);
+    const revision = revisions.get(tabId);
+    loaded.then(() => { if (states.has(tabId) && revisions.get(tabId) === revision) update(tabId, { stale: true }, true); }).catch(() => {});
   }
   function remove(tabId) { launches.delete(tabId); stop(tabId); states.delete(tabId); publish(tabId); persist().catch(() => {}); }
-  return { start, stop, connect, snapshot, cancelAll, invalidate, remove };
+  return { start, ensure, stop, connect, snapshot, cancelAll, invalidate, remove };
 }

@@ -7,6 +7,7 @@ import { blacklistSite, blockingSite, changeBlacklist, domainMatches } from './l
 import { createContextMenus } from './lib/context-menu.js';
 import { cleanPageInfo, cleanPageBlocks } from './lib/page-cache.js';
 import { createSummaryManager } from './lib/summary-manager.js';
+import { createSummaryPanel } from './lib/summary-panel.js';
 import { cleanSummaryProfile } from './lib/summary-presets.js';
 import { runSummaryModel } from './lib/summary-model.js';
 import { runConnections } from './lib/connections.js';
@@ -107,8 +108,8 @@ async function pageCommand(tabId, action, mode) {
 async function setSiteBlocked(input, blocked) {
   const site = blacklistSite(input);
   abortRequests(item => item.origin && domainMatches(new URL(item.origin).hostname, site));
-  if (blocked) summaries.cancelAll('网站黑名单已更新，生成已停止。请确认来源网站后重新总结。');
   await settings.changeConfig(value => { value.blacklist = changeBlacklist(value.blacklist, site, blocked); });
+  await summaryPanels.syncAll();
   await broadcast();
   if (!blocked) await injectExisting(site);
   const [active] = await chrome.tabs.query({ active: true, currentWindow: true });
@@ -116,13 +117,11 @@ async function setSiteBlocked(input, blocked) {
   return { blacklist: (await settings.config()).blacklist };
 }
 const summaries = createSummaryManager({ chromeApi: chrome, settings, tabState, permissionGranted: connectionPermission });
+const summaryPanels = createSummaryPanel({ chromeApi: chrome, settings, tabState, summaries, whenReady: () => ready });
 const menus = createContextMenus(chrome, {
   state: async tabId => tabState(tabId, await settings.config()),
   settings: () => chrome.tabs.create({ url: chrome.runtime.getURL('options.html#model') }),
-  summary: tab => {
-    // Must run before any await: native sidePanel.open requires this gesture.
-    return chrome.sidePanel.open({ windowId: tab.windowId }).then(() => ready).then(() => summaries.start(tab.id));
-  },
+  summary: tab => summaryPanels.open(tab.id),
   toggle: state => setSiteBlocked(state.blockingSite || state.origin, !state.blocked),
   selection: async (tabId, text) => {
     const message = { type: 'SHIYI/CONTEXT_TRANSLATE', text: boundedText(text, 16000, '选区') };
@@ -135,6 +134,7 @@ const ready = settings.initializeStorage().then(async () => {
   await chrome.action.setBadgeBackgroundColor({ color: '#006665' });
   await store.purgeExpiredTrash();
   await syncScripts();
+  await summaryPanels.initialize();
   await menus.install();
   const [active] = await chrome.tabs.query({ active: true, currentWindow: true });
   if (active) await menus.update(active.id).catch(() => {});
@@ -382,7 +382,7 @@ chrome.runtime.onMessage.addListener((message, sender, respond) => {
       // Opening a native panel closes Chrome's action popup. Own the entire
       // open -> start chain here so destroying that popup cannot drop the job.
       // This call must precede ready/other awaits to retain the click gesture.
-      task = chrome.sidePanel.open({ tabId: message.tabId }).then(() => ready).then(() => summaries.start(message.tabId, message.preset));
+      task = summaryPanels.open(message.tabId, message.preset);
     } else task = handle(message, sender);
   } catch (error) { respond({ ok: false, error: friendlyError(error) }); return false; }
   task.then(data => respond({ ok: true, data }), error => respond({ ok: false, error: friendlyError(error) }));
@@ -400,16 +400,15 @@ chrome.runtime.onInstalled.addListener(details => {
   }).catch(() => {});
 });
 chrome.runtime.onStartup.addListener(() => ready.then(syncScripts).catch(() => {}));
-chrome.permissions.onRemoved.addListener(() => ready.then(async () => { abortRequests(); summaries.cancelAll('浏览器权限已变更，生成已停止。'); await broadcast(); }).catch(() => {}));
-chrome.permissions.onAdded.addListener(() => ready.then(async () => { await injectExisting(); await broadcast(); }).catch(() => {}));
+chrome.permissions.onRemoved.addListener(() => ready.then(async () => { abortRequests(); summaries.cancelAll('浏览器权限已变更，生成已停止。'); await summaryPanels.syncAll(); await broadcast(); }).catch(() => {}));
+chrome.permissions.onAdded.addListener(() => ready.then(async () => { await injectExisting(); await summaryPanels.syncAll(); await broadcast(); }).catch(() => {}));
 chrome.tabs.onActivated.addListener(({ tabId }) => ready.then(() => menus.update(tabId)).catch(() => {}));
 chrome.tabs.onUpdated.addListener((tabId, change, tab) => {
-  if (change.status === 'loading' || change.url) summaries.invalidate(tabId);
   if (change.status === 'loading') { abortRequests(item => item.tabId === tabId); setBadge(tabId, false).catch(() => {}); }
   if (tab.active && (change.status === 'complete' || change.url)) ready.then(() => menus.update(tabId)).catch(() => {});
 });
-chrome.tabs.onRemoved.addListener(tabId => { abortRequests(item => item.tabId === tabId); summaries.remove(tabId); });
+chrome.tabs.onRemoved.addListener(tabId => { abortRequests(item => item.tabId === tabId); });
 chrome.runtime.onConnect.addListener(port => {
   if (port.name !== 'SHIYI_SUMMARY' || !trusted(port.sender) || new URL(port.sender.url).pathname !== '/summary.html') { port.disconnect(); return; }
-  summaries.connect(port);
+  summaryPanels.connect(port);
 });

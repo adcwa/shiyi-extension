@@ -2,7 +2,7 @@ import { api } from './common.js';
 import { SUMMARY_PRESETS } from '../lib/summary-presets.js';
 
 const $ = selector => document.querySelector(selector), R = globalThis.DianyiDocs;
-let tabId, windowId, port, result, view = 'content', follow = true, frame, toastTimer, exportTarget, retryBusy = false;
+let tabId, port, result, view = 'content', follow = true, frame, toastTimer, exportTarget, retryBusy = false, unloading = false;
 const artifacts = new Map(), sourceViews = new Set(), positions = new Map();
 const active = () => ['extracting', 'classifying', 'streaming'].includes(result?.phase);
 const scroller = $('#summary-scroller'), doc = $('#summary-doc');
@@ -38,17 +38,17 @@ function render() {
   frame = null; remember();
   const s = result, hasText = !!s?.text;
   $('#source-title').textContent = s?.source?.title || '当前网页';
-  $('#source-detail').textContent = s ? [s.source?.domain, SUMMARY_PRESETS[s.chosen || s.preset]?.name, s.model].filter(Boolean).join(' · ') : '从插件弹窗最上方或网页右键开始总结。';
-  $('#summary-status').textContent = s ? statusLabels[s.phase] || '准备就绪' : '准备就绪';
+  $('#source-detail').textContent = s ? [s.source?.domain, SUMMARY_PRESETS[s.chosen || s.preset]?.name, s.model].filter(Boolean).join(' · ') : '当前标签页 · 打开即总结';
+  $('#summary-status').textContent = s ? statusLabels[s.phase] || '正在准备总结…' : '正在准备总结…';
   $('#summary-stop').hidden = !active(); $('#summary-retry').hidden = !s || active(); $('#summary-retry').disabled = retryBusy;
   const warnings = [];
-  if (s?.stale) warnings.push('来源网页已刷新或切换，下方保留旧结果。重新总结将读取当前网页。');
+  if (s?.stale) warnings.push('网页已变化，正在等待当前页加载后自动总结。');
   if (s?.truncated) warnings.push('本页较长，本次仅纳入前 60,000 字符以内的已加载正文。');
   if (s?.fallback) warnings.push('主题识别结果不完整，已改用通用总结。');
   $('#scope-note').textContent = warnings.join(' '); $('#scope-note').hidden = !warnings.length;
   const message = $('#summary-message'); message.classList.toggle('error', !!s?.error);
   if (s?.error) { message.replaceChildren(); const title = document.createElement('h2'); title.textContent = s.phase === 'stopped' ? '生成已停止' : '这次总结未完成'; const text = document.createElement('p'); text.textContent = s.error; message.append(title, text); }
-  else if (!hasText) { message.innerHTML = active() ? '<h2>正在准备总结</h2><p>只读取当前页已加载的正文，不读取表单输入。生成后会逐步显示在这里。</p>' : '<h2>抓住重点，继续阅读</h2><p>在插件弹窗选择总结方式，或右键“点译 → 总结当前网页”。</p><p>拖动浏览器侧栏分隔线可调整宽度；模型与提示词在原设置页配置。</p>'; }
+  else if (!hasText) { message.innerHTML = '<p>网页加载完成后，重点会逐步显示在这里。</p>'; }
   else message.replaceChildren();
   const parsed = R.parse(s?.text || '', { streaming: s?.phase !== 'complete' });
   artifacts.clear(); parsed.artifacts.forEach(item => artifacts.set(item.id, item));
@@ -79,12 +79,12 @@ function accept(next) {
   if (next?.id !== result?.id) { remember(); doc.replaceChildren(); scroller.dataset.resultId = ''; sourceViews.clear(); view = 'content'; follow = true; scroller.scrollTop = 0; }
   result = next; schedule();
 }
-async function bind(id) { tabId = id; accept(null); port?.postMessage({ type: 'bind', tabId }); }
+function panelMessage(type) { try { port?.postMessage({ type, tabId, visible: document.visibilityState === 'visible' }); } catch {} }
 function connect() {
   port = chrome.runtime.connect({ name: 'SHIYI_SUMMARY' });
   port.onMessage.addListener(message => { if (message.type === 'state' && message.tabId === tabId) accept(message.state); });
-  port.onDisconnect.addListener(() => { if (chrome.runtime.lastError) toast('后台连接已断开，正在重新连接…'); setTimeout(connect, 800); });
-  if (Number.isInteger(tabId)) port.postMessage({ type: 'bind', tabId });
+  port.onDisconnect.addListener(() => { if (unloading) return; if (chrome.runtime.lastError) toast('后台连接已断开，正在重新连接…'); setTimeout(connect, 800); });
+  panelMessage('bind');
 }
 async function copy(text) {
   try { await navigator.clipboard.writeText(text); }
@@ -137,5 +137,10 @@ document.addEventListener('click', event => {
   })().catch(error => toast(error.message));
 });
 scroller.addEventListener('scroll', () => { follow = scroller.scrollHeight - scroller.scrollTop - scroller.clientHeight < 70; remember(); $('#new-output').hidden = follow || !active(); });
-chrome.tabs.onActivated.addListener(info => { if (info.windowId === windowId) bind(info.tabId); });
-(async () => { windowId = (await chrome.windows.getCurrent()).id; const [tab] = await chrome.tabs.query({ active: true, windowId }); tabId = tab?.id; connect(); render(); })().catch(error => { $('#summary-message').textContent = error.message; });
+document.addEventListener('visibilitychange', () => panelMessage('visibility'));
+window.addEventListener('pagehide', () => { unloading = true; port?.disconnect(); });
+try {
+  const id = new URL(location.href).searchParams.get('tabId');
+  if (!/^\d+$/.test(id || '') || !Number.isSafeInteger(Number(id))) throw new Error('请从当前网页的插件弹窗或右键菜单打开总结。');
+  tabId = Number(id); connect(); render();
+} catch (error) { $('#summary-status').textContent = '无法读取当前网页'; $('#summary-message').textContent = error.message; }

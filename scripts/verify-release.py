@@ -71,7 +71,7 @@ try:
         assert (extracted/'INSTALL.md').read_bytes() == (ROOT/'docs/user-guide.md').read_bytes()
         assert (extracted/'INSTALL.html').read_bytes() == (ROOT/'docs/user-guide.html').read_bytes()
         assert manifest['permissions'] == json.loads((ROOT/'src/manifest.json').read_text())['permissions']
-        assert manifest['side_panel'] == {'default_path':'summary.html'} and 'sidePanel' in manifest['permissions']
+        assert not manifest.get('side_panel') and 'sidePanel' in manifest['permissions']
         assert 'ui/summary.js' in (extracted/'summary.html').read_text()
         assert (extracted/'summary-guide.html').read_bytes() == (ROOT/'docs/summary-guide.html').read_bytes()
         browser = next((Path.home()/'Library/Caches/ms-playwright').glob('chromium-1234/chrome-mac-arm64/Google Chrome for Testing.app/Contents/MacOS/Google Chrome for Testing'))

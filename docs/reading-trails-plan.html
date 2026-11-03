@@ -1,0 +1,335 @@
+<!doctype html><html lang="zh-CN"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>点译 · 阅读轨迹与周期总结（需求草案）</title><style>*{box-sizing:border-box}html{scroll-behavior:smooth;scroll-padding-top:90px}body{margin:0;background:#f5f5f0;color:#263735;font:14px/1.95 -apple-system,BlinkMacSystemFont,"Segoe UI","PingFang SC",sans-serif}a{color:#006665;text-decoration:none}a:hover{text-decoration:underline}header{padding:18px 30px;position:sticky;top:0;background:#fbfcf8ef;border-bottom:1px solid #dfe5df;backdrop-filter:blur(10px);display:flex;align-items:center;justify-content:space-between;gap:18px;z-index:5}.brand{font-size:23px;font-weight:650;letter-spacing:2px}header small{font-size:11px;color:#61716c;letter-spacing:.7px}.layout{max-width:1400px;display:grid;grid-template-columns:218px minmax(0,1fr);gap:30px;margin:auto;padding:35px 30px 60px}nav{position:sticky;top:105px;height:calc(100vh - 130px);overflow:auto;padding-right:12px}nav small{display:block;font-size:10px;letter-spacing:1.6px;color:#61716c;margin:0 10px 15px}nav a{display:block;padding:8px 10px;margin:3px 0;border-radius:7px;color:#61716c;font-size:12px}nav a:hover{background:#eaf3ee;text-decoration:none;color:#006665}main{min-width:0;border:1px solid #dfe5df;border-radius:13px;background:#fff;padding:37px 43px 45px}.eyebrow{font-size:10px;color:#006665;letter-spacing:2px;margin-bottom:12px;font-weight:600}h1{font-size:30px;font-weight:600;line-height:1.4;margin:0 0 15px;letter-spacing:-.6px}h2{font-size:21px;font-weight:550;margin:37px 0 15px;line-height:1.5}h3{font-size:16px;font-weight:550;margin:25px 0 12px}p{margin:11px 0 17px}blockquote{margin:24px 0;background:#edf4ec;border-left:3px solid #006665;padding:16px 20px;border-radius:0 8px 8px 0;color:#406247;font-size:13px}blockquote p{margin:0}.table-scroll{overflow-x:auto;border:1px solid #dfe5df;border-radius:9px;margin:17px 0 23px}table{width:100%;border-collapse:collapse;font-size:12px;line-height:1.9}th{text-align:left;background:#f2f7ed;color:#4e704d;font-weight:500;padding:12px 14px;border-bottom:1px solid #dfe5df}td{padding:13px 14px;border-bottom:1px solid #e5ebe0;vertical-align:top;min-width:100px}tr:last-child td{border-bottom:0}td:first-child{min-width:130px}tr:nth-child(even) td{background:#fcfdf8}ul,ol{padding-left:23px}li{margin:8px 0}code{background:#eef3e8;border-radius:4px;padding:2px 5px;font-size:12px;overflow-wrap:anywhere}pre{padding:17px 19px;border-radius:8px;background:#eef3e8;overflow:auto;font-size:12px}pre code{padding:0}strong{font-weight:600}.doc-footer{font-size:11px;line-height:1.9;color:#61716c;border-top:1px solid #dfe5df;padding-top:22px;margin-top:35px}.source-label{font-size:10px;color:#61716c;letter-spacing:.5px}.download{font-size:12px;padding:9px 14px;border:1px solid #006665;color:#006665;border-radius:8px;white-space:nowrap;display:inline-block}@media(max-width:900px){.layout{grid-template-columns:175px minmax(0,1fr);gap:20px;padding:25px 20px}main{padding:28px 27px}header small{display:none}}@media(max-width:650px){header{padding:14px 19px}.brand{font-size:20px}.layout{display:block;padding:20px 13px}nav{height:auto;position:static;display:flex;flex-wrap:wrap;gap:5px;padding:0;margin-bottom:18px}nav small{width:100%;margin:0 6px 5px}nav a{font-size:10px;padding:5px 8px;border:1px solid #dfe5df;margin:0}main{padding:25px 20px}h1{font-size:24px}h2{font-size:20px}.table-scroll{margin-left:-6px;margin-right:-6px}table{font-size:11px}td,th{padding:10px;min-width:120px}.download{font-size:10px}}@media(prefers-reduced-motion:reduce){html{scroll-behavior:auto}}@media print{header,nav{display:none}.layout{display:block;padding:0}body{background:white}main{border:0;padding:0}h2{break-after:avoid}tr{break-inside:avoid}}</style></head><body><header><div><span class="brand">点译</span> <small>点一下，读懂。 / v0.12.1</small></div><span class="source-label">CHROME / EDGE</span></header><div class="layout"><nav aria-label="文档目录"><small>CONTENTS / 目录</small><a href="#section-1">1. 用户需求</a><a href="#section-2">2. 访问采集与上下文</a><a href="#section-3">3. 先保存，再总结</a><a href="#section-4">4. 模型和后台任务</a><a href="#section-5">5. 定时与每日总结</a><a href="#section-6">6. 日、周、月、年的提炼关系</a><a href="#section-7">7. 查看入口</a><a href="#section-8">8. 黑名单、删除与数据生命周期</a><a href="#section-9">9. 通用知识导出</a><a href="#section-10">10. 技术落点</a><a href="#section-11">11. 交付顺序</a><a href="#section-12">12. 验收条件</a><a href="#section-13">13. 开发前待确认的业务选择</a></nav><main><div class="eyebrow">后续需求 / 阅读轨迹与周期总结</div><h1>阅读轨迹与周期总结 · 需求和实施方案</h1>
+<p>2026-11-03 · 已记录，待开发</p>
+<p>把访问过的网页，积累成可追溯、可持续提炼、可导出的个人知识库。</p>
+<p>本文依据用户本轮需求保存。当前交付仍为 v0.12.1：侧栏可见时自动总结，会话暂存最近 8 页。本文中的全网页后台总结、长期轨迹库、定时汇总与知识导出属于下一阶段需求，尚未启用。用户说“先存起”，本轮先记录完整方向；未将建议参数视为已确认配置。</p>
+<h2 id="section-1">1. 用户需求</h2>
+<div class="table-scroll"><table>
+<thead>
+<tr>
+<th>能力</th>
+<th>要达到的行为</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>全网页后台总结</td>
+<td>普通网页访问后自动排队总结，不以侧栏是否打开为条件；后台加载的已打开网页也可以处理</td>
+</tr>
+<tr>
+<td>上下文</td>
+<td>结合当前页正文、标题、栏目与必要的关联阅读上下文，避免只留下脱离语境的片段</td>
+</tr>
+<tr>
+<td>本地保存</td>
+<td>先把访问与可读取内容存下来，模型结果完成后持久保存到本地轨迹中</td>
+</tr>
+<tr>
+<td>侧栏读取</td>
+<td>打开侧栏直接读取当前页已有结果；正在生成则接续显示；没有结果则展示任务状态</td>
+</tr>
+<tr>
+<td>黑名单</td>
+<td>黑名单网站不采集、不发起新的总结；新增黑名单后停止该网站在途任务</td>
+</tr>
+<tr>
+<td>每日总结</td>
+<td>默认每天 18:00 再使用总结模型汇总；时间可以配置</td>
+</tr>
+<tr>
+<td>周期积累</td>
+<td>支持日、周、月、年的持续积累与总结，不停留在一次性网页摘要</td>
+</tr>
+<tr>
+<td>查看与分析</td>
+<td>查看自己的访问轨迹、各周期总结，并按主题、项目、来源等维度分析</td>
+</tr>
+<tr>
+<td>知识导出</td>
+<td>支持通用、可迁移的知识文件格式，保留来源、时间、引用与关联关系</td>
+</tr>
+</tbody>
+</table></div>
+<p>核心闭环：访问网页 → 本地留存 → 后台总结 → 我的轨迹 → 周期回顾 → 知识提炼与导出。</p>
+<p><strong>界面行为继续按标签页独立管理。</strong> 后台自动总结全部符合条件的网页，不代表自动弹开全部网页的侧栏。侧栏仍专注总结和制品展示；翻译、词句库与设置保留原入口。</p>
+<h2 id="section-2">2. 访问采集与上下文</h2>
+<p>从功能实际上线后记录普通 HTTP(S) 网页的主文档导航、刷新及已加载正文。首次升级可检查当前已打开且可读取的标签页，先登记、再排队。不开侧栏、切到其他标签页，不应阻断已登记任务。</p>
+<p>本轮“所有访问过”先按后续持续访问理解，不据此扫描或批量请求浏览器既有历史记录。浏览器内部页、商店页、内置 PDF、无可读取文字的页面及跨域框架沿用当前支持边界，记录明确状态，不伪造摘要。</p>
+<div class="table-scroll"><table>
+<thead>
+<tr>
+<th>上下文</th>
+<th>保存与使用方式</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>网页基本信息</td>
+<td>标题、站点、适合展示和导出的来源地址、访问时间、时区、语言</td>
+</tr>
+<tr>
+<td>当前页内容</td>
+<td>可读正文、章节标题、正文中的代码、表格和关键段落；保留截取状态</td>
+</tr>
+<tr>
+<td>阅读来源链</td>
+<td>本次访问由哪条已记录页面或阅读会话进入，保留关联记录 ID</td>
+</tr>
+<tr>
+<td>本地相关信息</td>
+<td>与该页直接相关的已存词句、用户备注、少量相关页面摘要；附来源 ID</td>
+</tr>
+<tr>
+<td>来源与版本</td>
+<td>正文内容指纹、采集时间、摘要版本、模型和提示词版本、上下文来源 ID</td>
+</tr>
+</tbody>
+</table></div>
+<p>不读取表单值、密码、编辑区草稿、隐藏内容、Cookie 或认证令牌；不为了补齐轨迹向历史 URL 携带登录凭据发起抓取。仅译文模式继续使用原始正文。页面内的指令是待分析资料，不能改变总结任务或扩大采集范围。</p>
+<p>关联上下文应有边界：优先本次阅读链和直接相关的本地摘要，不把所有浏览历史拼进每次请求，也不把“打开过网页”写成“已读完、已掌握或已完成工作”。</p>
+<h2 id="section-3">3. 先保存，再总结</h2>
+<p>轨迹、页面内容和模型任务需要分开管理：</p>
+<div class="table-scroll"><table>
+<thead>
+<tr>
+<th>数据</th>
+<th>作用</th>
+<th>重复访问时</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>访问记录</td>
+<td>保存每次访问的时间、来源链和状态</td>
+<td>增加一次访问事件，形成真实轨迹</td>
+</tr>
+<tr>
+<td>正文快照</td>
+<td>供后台任务在离开或关闭页面后使用</td>
+<td>相同内容按指纹复用，不重复保存整份正文</td>
+</tr>
+<tr>
+<td>页面摘要</td>
+<td>保存一份内容版本的事实、要点和依据</td>
+<td>正文和总结配置相同则复用已有摘要</td>
+</tr>
+</tbody>
+</table></div>
+<p>采集到内容后，先在本地事务中写入访问、快照和待处理任务，再调用模型。标签关闭或浏览器后台服务重启后，已保存内容仍能继续处理。若页面在正文可读取前已关闭，只保存可取得的元信息和“内容未取得”状态，不生成猜测性总结。</p>
+<p>正文没变化时，阅读会话或来源链变化只增加轨迹关联，避免每次访问因上下文细微变化重新总结整页。上下文变化可以进入后续日结和主题分析；确实需要重新判断语境时提供明确的重新总结操作。</p>
+<p>页面摘要不再依赖最近 8 页的会话缓存。长期轨迹、摘要、引用与用户备注持续保存在本地，直到用户清理。卸载扩展、磁盘故障和浏览器存储异常仍需要依靠用户导出的文件恢复，不能把“本地保存”描述成永久备份。</p>
+<h2 id="section-4">4. 模型和后台任务</h2>
+<p>默认复用当前独立的总结模型及其默认、备用连接，不借用翻译模型或翻译 Key。页面、日结、周结、月结、年结均有各自场景提示词；首版不要求分别填写多套模型连接。若后续提供按阶段选模型，属于可选的业务设置。</p>
+<p>后台采用持久化任务队列和有界并发。任务状态至少包含待采集、待总结、生成中、完成、部分完成、失败、因黑名单取消和已删除。服务重启要恢复任务状态，避免同一任务被多次同时领取。</p>
+<ul>
+<li>相同内容、模型和提示词版本的页面任务去重；多个标签打开同一内容可共享结果。</li>
+<li>同一周期和同一批输入只创建一次汇总任务，重复定时事件不产生重复请求。</li>
+<li>总结已输出文字后保留部分结果，不因为网络抖动重新从头循环生成；备用连接继续遵守现有有限尝试规则。</li>
+<li>失败、未配置模型或会话 Key 已失效时保留本地内容和任务状态，恢复连接后再续办，不丢轨迹。</li>
+<li>展示实际请求次数，以及服务商明确返回的用量；没有返回的 Token 或费用标为未知，不伪造账单。</li>
+</ul>
+<p>后台自动总结会扩大用量。页面已有结果应先复用，周期汇总优先读取已存摘要而非重复上传所有原文；资料过多时分批归纳，并保留分批范围和引用。具体并发、队列预算和大文档拆分值在实现时验证，不新增隐藏启动参数或默认关闭功能的临时开关。</p>
+<h2 id="section-5">5. 定时与每日总结</h2>
+<p>每日总结默认 18:00，可配置时间。保存时同时记录时区、任务覆盖区间和下一次计划时间。周、月、年任务等待其依赖的日结或月结完成后执行，不在同一时刻对同一批数据抢跑。</p>
+<p>计划采用扩展的定时事件，并在后台服务启动时检查、修复定时登记。电脑休眠不会被闹钟唤醒，浏览器完全退出时也不能承诺准时生成；恢复运行后依据本地任务账本补办缺失周期，防止重复。不能只依赖后台的长时间计时器。<a href="https://developer.chrome.com/docs/extensions/reference/api/alarms">Chrome 定时事件说明</a>、<a href="https://developer.chrome.com/docs/extensions/get-started/tutorial/service-worker-events">后台定时教程</a>。</p>
+<p><strong>18:00 不是自然日结束，统计口径需要明确。</strong> 建议按自然日保存轨迹，18:00 生成“截至当前”的当日总结；18:00 后的记录仍属于当天，并在下一次计划更新时补齐相应日结版本。也可以选择“上次日结至本次日结”的阅读日口径，但必须让界面显示起止时间，不能默默把晚间访问归错日期。此项保留为开发前需确认的业务选择。</p>
+<p>每个周期任务记录输入快照、覆盖到的时间、尚未完成的页面数量和版本号。当天没有有效内容时直接显示空记录，不调用模型编造总结。截止时仍有页面任务未完成，则显示部分覆盖，后续合并补齐，不把未处理网页算作已总结。</p>
+<h2 id="section-6">6. 日、周、月、年的提炼关系</h2>
+<div class="table-scroll"><table>
+<thead>
+<tr>
+<th>层级</th>
+<th>主要输入</th>
+<th>输出重点</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>页面</td>
+<td>原文快照及必要上下文</td>
+<td>事实摘要、关键依据、概念、代码与来源</td>
+</tr>
+<tr>
+<td>每日</td>
+<td>当日有效页面摘要、访问链和用户备注</td>
+<td>当天关注主题、关键收获、来源之间的联系与待核对问题</td>
+</tr>
+<tr>
+<td>每周</td>
+<td>当周日结及必要页面证据</td>
+<td>持续关注的问题、主题变化、方案比较和未解决事项</td>
+</tr>
+<tr>
+<td>每月</td>
+<td>当月日结、可用的周结洞见及页面证据</td>
+<td>主题脉络、重复出现的知识、阶段变化和重要来源</td>
+</tr>
+<tr>
+<td>每年</td>
+<td>当年月结及必要下层证据</td>
+<td>长期关注方向、知识体系变化、主要结论及仍未解决的问题</td>
+</tr>
+<tr>
+<td>专题</td>
+<td>用户选择的时间、主题、项目或来源集合</td>
+<td>跨周期关联、异同、证据冲突与知识卡片</td>
+</tr>
+</tbody>
+</table></div>
+<p>不直接把每四份周报当成月报。周会跨月、月份天数不同；月结需要按当月的实际输入和来源集合去重。年结以自然年内的月结为主，也保留原始来源链。</p>
+<p>上层模型不能只收到没有依据的浓缩文本。每条结论关联输入摘要 ID，重要判断带页面来源或对应摘录；事实、原文观点和模型推论分开。通过摘要向下展开，始终可以回到访问记录和原网页。后续资料更正或发现冲突时保留修订记录，不把旧结论静默改成新结论。</p>
+<p>“不断提炼”通过新资料、周期调度和用户主动分析驱动，不意味着对没有新输入的内容无限循环调用模型。</p>
+<h2 id="section-7">7. 查看入口</h2>
+<p>在原管理界面增加两个正常业务入口：</p>
+<ul>
+<li><strong>我的轨迹</strong>：按日期查看访问列表，支持标题、站点、主题、项目和处理状态筛选；查看页面摘要、上下文关系、原文依据及重复访问记录。可以编辑备注、归入项目、重新总结、删除或导出。</li>
+<li><strong>阅读回顾</strong>：选择日、周、月、年和自定义范围，查看覆盖时间、输入数量、总结内容、引用、部分完成说明及历史版本；可按主题、项目或来源切换分析维度。</li>
+</ul>
+<p>侧栏仍只服务当前页总结展示：先读取本地匹配结果，任务进行中则接收增量，尚未生成则显示排队或失败状态。打开侧栏不应另开一轮相同请求。设置、轨迹检索和周期调度配置留在管理界面，翻译入口保持现状。</p>
+<h2 id="section-8">8. 黑名单、删除与数据生命周期</h2>
+<p>黑名单检查覆盖采集、入队、开始请求、结果写入和周期输入选择。加入黑名单后停止相关在途任务，晚到结果也不得重新写入；移出黑名单恢复后续采集，不批量追溯抓取停用期间网页。</p>
+<p>既有本地历史不因加入黑名单而自动删除，但默认不再进入新的模型汇总和知识导出。若既有日结或月结混入了现已停用的来源，需要标注依赖变化，后续从允许的下层证据重建；不能把这些旧汇总原样再次发送给模型，间接绕过黑名单。</p>
+<p>删除某条轨迹或来源时，同步处理正文快照、摘要、引用和待执行任务，标记受影响的上层总结。旧任务不能把已删内容写回来。用户能清理原文快照、清理某站点记录、清理时间段或导出后清理；不能为节省空间静默丢弃已积累的知识。</p>
+<p>长期数据建议独立保存在扩展自身的 IndexedDB，与词库和可淘汰的页面翻译缓存区分。容量检测和持久化保护需要纳入实现；IndexedDB 可在扩展后台使用，增长较大时评估持久化存储及扩展存储权限，不能按无限容量设计。<a href="https://developer.chrome.com/docs/extensions/develop/concepts/storage-and-cookies">Chrome 扩展存储说明</a>。</p>
+<h2 id="section-9">9. 通用知识导出</h2>
+<p>首选同时照顾人工阅读与程序处理的格式：</p>
+<div class="table-scroll"><table>
+<thead>
+<tr>
+<th>格式</th>
+<th>内容与用途</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Markdown + YAML 元信息</td>
+<td>页面摘要、日周月年回顾、知识卡片；保留稳定 ID、标题、日期、标签、来源和相对链接</td>
+</tr>
+<tr>
+<td>JSON / JSONL</td>
+<td>保留结构化轨迹、摘要、版本、证据关系和元信息，供后续导入、检索或知识处理</td>
+</tr>
+<tr>
+<td>CSV</td>
+<td>导出访问时间线与统计索引，不把复杂知识关系压进一个无法恢复的表格</td>
+</tr>
+<tr>
+<td>独立 HTML</td>
+<td>提供可阅读、可分享的回顾文档；使用本地样式，不附远程追踪</td>
+</tr>
+<tr>
+<td>ZIP 知识包</td>
+<td>同时携带上述文件、说明、结构版本和校验信息，避免只有孤立摘要而丢失来源</td>
+</tr>
+</tbody>
+</table></div>
+<p>建议的导出结构：</p>
+<pre><code class="language-text">dianyi-knowledge/
+  README.md
+  manifest.json
+  visits.jsonl
+  relations.jsonl
+  pages/&lt;stable-id&gt;.md
+  reviews/daily/&lt;date&gt;.md
+  reviews/weekly/&lt;period&gt;.md
+  reviews/monthly/&lt;month&gt;.md
+  reviews/yearly/&lt;year&gt;.md
+  topics/&lt;stable-id&gt;.md
+  timeline.csv
+</code></pre>
+<p>元信息至少包含 <code>schemaVersion</code>、<code>id</code>、<code>kind</code>、时间与时区、统计区间、<code>sourceIds</code>、摘要版本、提示词版本和内容校验值。关系至少表达访问到页面、页面到摘要、摘要到周期结论的关联；导出的引用必须能定位到文件或来源。</p>
+<p>不导出 API Key、认证令牌、会话 Cookie、认证缓存或含密钥的服务配置。默认知识导出包含已保存摘要、必要摘录和经过处理的来源地址；完整原文快照作为明确选择的导出范围。提供按日期、周期、主题和项目选择范围，以及增量导出标识。只承诺文件结构可解释，不提前宣称已验证所有第三方知识库的导入兼容性。文档使用 Markdown 和 HTML，不生成 Word。</p>
+<h2 id="section-10">10. 技术落点</h2>
+<p>以下是开发建议，不是已经执行的迁移：</p>
+<div class="table-scroll"><table>
+<thead>
+<tr>
+<th>位置</th>
+<th>需要的变化</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>网页采集</td>
+<td>在页面可读时采集原始正文和必要元信息，不依赖侧栏端口；支持导航和内容版本识别</td>
+</tr>
+<tr>
+<td>独立知识数据层</td>
+<td>新建访问、正文快照、摘要、关系、任务、用量记录等存储；本地事务写入和删除代次保护</td>
+</tr>
+<tr>
+<td>总结执行器</td>
+<td>将模型调用与页面实时存活解耦，接收已保存快照；维持流式输出、取消、备用和错误边界</td>
+</tr>
+<tr>
+<td>侧栏控制器</td>
+<td>保留按标签页独立打开，只订阅当前页匹配结果与任务状态，不充当自动总结的准入条件</td>
+</tr>
+<tr>
+<td>周期调度</td>
+<td>增加定时登记、任务依赖、时区、补办、输入版本和幂等检查</td>
+</tr>
+<tr>
+<td>管理界面</td>
+<td>增加我的轨迹、阅读回顾、时间与提示词配置、容量管理和导出入口</td>
+</tr>
+<tr>
+<td>权限与说明</td>
+<td>实现时加入所需定时权限，更新隐私说明和真实请求触发说明，不新增不必要的浏览器历史读取权限</td>
+</tr>
+</tbody>
+</table></div>
+<p>当前相关基础包括 <code>summary-extract.js</code>、<code>summary-manager.js</code>、<code>summary-panel.js</code>、<code>summary-model.js</code>、<code>connections.js</code> 和现有管理界面。不能只移除可见性判断：目前执行器仍要在任务启动时读取活标签页，且结果只保存在会话中，直接去掉判断会丢失关闭页面后的内容，也不能形成可靠轨迹。</p>
+<h2 id="section-11">11. 交付顺序</h2>
+<ol>
+<li><strong>先保存完整轨迹</strong>：持久化访问和正文快照，后台队列、黑名单、摘要复用、侧栏本地读取、轨迹查看，以及 Markdown / JSONL 导出。</li>
+<li><strong>每日回顾</strong>：可配置的 18:00 调度、时区、补办、覆盖区间、每日总结和查看；复用现有独立总结模型。</li>
+<li><strong>周期提炼</strong>：周、月、年、跨边界去重、版本与依赖更新，保证每条结论可以追溯。</li>
+<li><strong>多维知识</strong>：主题与项目视图、来源比较、知识卡片、跨周期分析和完整知识包导出。</li>
+</ol>
+<p>这些是完整方向的分步实现，不把首版覆盖范围冒充全部交付。新增业务入口正常可用，不依靠额外启动参数开放。</p>
+<h2 id="section-12">12. 验收条件</h2>
+<ul>
+<li>不打开侧栏访问两个不同网页，均能生成本地轨迹与摘要；两页侧栏不会被自动弹开。</li>
+<li>快速切页或关闭标签页后，已采集页面仍可总结；正文未取得时如实标记，不伪造结果。</li>
+<li>反复访问同一内容保留访问次数，但不重复调用页面总结模型；正文实质变化形成新版本。</li>
+<li>打开侧栏优先加载本地结果，进行中的任务继续显示，不额外创建重复任务。</li>
+<li>黑名单、权限变化和删除能取消相关任务，晚到结果不会写回，其他站点任务不受影响。</li>
+<li>到达配置时间生成对应日结；休眠、重启和重复定时事件不会漏掉已登记任务或重复结算同一输入。</li>
+<li>18:00 后访问、跨日、跨周跨月、跨年和时区变化都有明确归属与覆盖范围。</li>
+<li>上层总结只使用允许的有效来源，点击引用能回到具体轨迹；跨月周报不造成重复统计。</li>
+<li>没有有效输入、部分失败、配置失效和空间不足时显示真实状态，不产生虚假的完整总结。</li>
+<li>关闭并重启浏览器后仍能查轨迹与回顾；升级保留数据；导出文件能独立阅读和解析，引用完整且没有密钥。</li>
+</ul>
+<h2 id="section-13">13. 开发前待确认的业务选择</h2>
+<div class="table-scroll"><table>
+<thead>
+<tr>
+<th>选择</th>
+<th>目前建议</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>本轮交付范围</td>
+<td>按“先存起”先保存需求；用户如要求立即开发，再按上述顺序推进</td>
+</tr>
+<tr>
+<td>日结的“当天”</td>
+<td>自然日归档、18:00 阶段总结，晚间数据后续补齐；也可采用阅读日口径</td>
+</tr>
+<tr>
+<td>周月年生成时点</td>
+<td>建议周期末在日结完成后生成，存在迟到资料时标记待补齐，而不是抢跑后永久漏记</td>
+</tr>
+<tr>
+<td>历史浏览器记录</td>
+<td>首版不扫描既有浏览历史；从上线后持续访问与当前可读取的打开标签页开始</td>
+</tr>
+<tr>
+<td>长期正文保存范围</td>
+<td>保存已提取且经过范围过滤的正文快照；容量管理与用户清理不静默删除摘要知识</td>
+</tr>
+</tbody>
+</table></div>
+<p>上述建议均保留在方案中，不在本轮直接改变现有插件行为。</p>
+<footer class="doc-footer">点译 v0.12.1 · 自己的模型，按块阅读<br>文档提供 HTML 阅读版及 Markdown 可编辑版本。</footer></main></div></body></html>

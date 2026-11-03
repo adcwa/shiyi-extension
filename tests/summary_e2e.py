@@ -68,7 +68,7 @@ try:
    passed('summary prompts persist in original options entrance')
    article=context.new_page();article.on('pageerror',lambda e:errors.append(str(e)));article.goto(origin+'/article?private=hidden');expect(article.locator('#shiyi-extension-root')).to_be_attached()
    tab=ui.evaluate('async url=>(await chrome.tabs.query({})).find(t=>t.url===url).id',article.url)
-   panel=context.new_page();panel.on('pageerror',lambda e:errors.append(str(e)));panel.goto('chrome-extension://'+ext+'/summary.html');panel.set_viewport_size({'width':390,'height':900})
+   panel=context.new_page();panel.on('pageerror',lambda e:errors.append(str(e)));panel.goto('chrome-extension://'+ext+'/summary.html?tabId='+str(tab));panel.set_viewport_size({'width':390,'height':900})
    def activate():ui.evaluate('id=>chrome.tabs.update(id,{active:true})',tab);panel.wait_for_timeout(200)
    activate();before=len(calls);message('SUMMARY_START',tabId=tab,preset='auto')
    expect(panel.locator('#summary-status')).to_contain_text('正在生成',timeout=12000);expect(panel.locator('#summary-doc')).to_contain_text('网页总结')
@@ -144,10 +144,10 @@ try:
    passed('403 preserves useful diagnosis and does not auto-retry or echo raw secrets')
    control['mode']='ok';article.goto(origin+'/long');activate();message('SUMMARY_START',tabId=tab,preset='general');expect(panel.locator('#scope-note')).to_contain_text('60,000');expect(panel.locator('#summary-status')).to_have_text('总结完成',timeout=15000)
    passed('long input is explicitly bounded and truncation is visible')
-   article.goto(origin+'/new-page');expect(panel.locator('#scope-note')).to_contain_text('来源网页已刷新或切换');before=len(calls);panel.wait_for_timeout(300);assert len(calls)==before
-   passed('navigation marks old result and never automatically charges for new page')
+   ui.bring_to_front();article.goto(origin+'/new-page');expect(panel.locator('#scope-note')).to_contain_text('网页已变化');before=len(calls);panel.wait_for_timeout(400);assert len(calls)==before
+   passed('navigation in a hidden panel document marks old result without auto-requesting')
    message('BLACKLIST_SET',site=origin,blocked=True);before=len(calls);message('SUMMARY_START',tabId=tab,preset='general');expect(panel.locator('#summary-message')).to_contain_text('黑名单');assert len(calls)==before
-   message('BLACKLIST_SET',site=origin,blocked=False);message('CLEAR_SUMMARY_KEY');assert message('UI_STATE')['profile']['hasKey'];before=len(calls);message('SUMMARY_START',tabId=tab);expect(panel.locator('#summary-message')).to_contain_text('总结设置');assert len(calls)==before
+   message('BLACKLIST_SET',site=origin,blocked=False);message('CLEAR_SUMMARY_KEY');assert message('UI_STATE')['profile']['hasKey'];before=len(calls);message('SUMMARY_START',tabId=tab);expect(panel.locator('#summary-message')).to_contain_text('API Key');assert len(calls)==before
    passed('blacklist and cleared summary credentials prevent requests; translation key stays independent')
    toolbar=context.new_page();toolbar.goto('chrome-extension://'+ext+'/popup.html?tab='+str(tab));expect(toolbar.locator('.summary-section')).to_be_visible();assert toolbar.locator('.popup-section').first.get_attribute('class').find('summary-section')>=0
    passed('popup summary entrance is first; original translation remains below')

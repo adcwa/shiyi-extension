@@ -2,7 +2,7 @@ import './text.js';
 import './block-text.js';
 import { DEFAULT_PROVIDER, PROVIDERS, presetProfile } from './providers.js';
 
-export const VERSION = '0.12.0';
+export const VERSION = '0.12.1';
 export const LANGUAGES = Object.freeze({ 'zh-CN': '简体中文', en: 'English', ja: '日本語', ko: '한국어', fr: 'Français', de: 'Deutsch', es: 'Español' });
 export const STYLES = Object.freeze({ regular: '常规', professional: '专业', humorous: '幽默', custom: '自定义' });
 export const PROMPTS = Object.freeze({

@@ -27,6 +27,7 @@ const pkg = JSON.parse(await fs.readFile(path.join(root, 'package.json'), 'utf8'
 const { VERSION } = await import('../src/lib/core.js');
 if (manifest.version !== pkg.version || VERSION !== pkg.version) throw new Error('Package, manifest and displayed extension versions must match');
 const origins = ['http://*/*', 'https://*/*'];
+if (!manifest.permissions.includes('sidePanel') || manifest.side_panel?.default_path) throw new Error('Summary panels must be tab-specific, without a global manifest fallback');
 const script = manifest.content_scripts?.[0];
 if (manifest.manifest_version !== 3 || JSON.stringify(manifest.host_permissions) !== JSON.stringify(origins) || manifest.optional_host_permissions?.length || manifest.content_scripts?.length !== 1 || JSON.stringify(script.matches) !== JSON.stringify(origins) || script.all_frames !== false || manifest.permissions.includes('tabs') || !manifest.permissions.includes('contextMenus') || manifest.externally_connectable || manifest.web_accessible_resources) throw new Error('Unexpected page or context-menu permissions');
 for (const file of [...script.js, ...script.css]) await fs.access(path.join(root, 'src', file));
