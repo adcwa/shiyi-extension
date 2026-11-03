@@ -1,0 +1,69 @@
+span[data-shiyi-mark] {
+  text-decoration-line: underline !important;
+  text-decoration-color: #71a99b !important;
+  text-decoration-thickness: 1.5px !important;
+  text-underline-offset: 3px !important;
+  cursor: help !important;
+  border-radius: 2px !important;
+}
+span[data-shiyi-mark]:hover, span[data-shiyi-mark]:focus-visible {
+  background-color: #e4f1e8 !important;
+  color: #005251 !important;
+}
+span[data-shiyi-mark]:focus-visible { outline: 2px solid #006665 !important; outline-offset: 3px !important; }
+span[data-shiyi-meaning] {
+  color: var(--shiyi-translation-ink, #006665) !important;
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", "PingFang SC", sans-serif !important;
+  font-size: .8em !important;
+  font-weight: 400 !important;
+  line-height: inherit !important;
+  user-select: none !important;
+  padding: 0 2px !important;
+}
+/* Translation text only: inherit page flow, without fills, borders or cards. */
+[data-shiyi-block-translation] {
+  --shiyi-translation-ink: #245e4d;
+  display: block !important;
+  box-sizing: border-box !important;
+  max-width: 100% !important;
+  min-width: 0 !important;
+  margin-block: .35em .7em !important;
+  padding: 0 !important;
+  border: 0 !important;
+  border-radius: 0 !important;
+  color: var(--shiyi-translation-ink) !important;
+  background: transparent !important;
+  white-space: pre-wrap !important;
+  overflow-wrap: anywhere !important;
+  text-decoration: none !important;
+  font-style: normal !important;
+  cursor: auto !important;
+}
+[data-shiyi-block-translation][data-shiyi-tone="dark"] { --shiyi-translation-ink: #c1e7d5; }
+[data-shiyi-block-translation] [data-shiyi-inline] { color: inherit !important; }
+[data-shiyi-block-translation] a[data-shiyi-inline] {
+  text-decoration: underline !important;
+  text-underline-offset: .15em;
+  cursor: pointer;
+}
+[data-shiyi-block-translation] a[data-shiyi-inline]:focus-visible { outline: 2px solid currentColor; outline-offset: 2px; }
+button>[data-shiyi-block-translation],a>[data-shiyi-block-translation],label>[data-shiyi-block-translation],summary>[data-shiyi-block-translation] { margin-block: .2em 0 !important; }
+[data-shiyi-block-translation][data-shiyi-layout="compact"] {
+  display: inline-block !important;
+  margin: 0 !important;
+  margin-inline-start: .45em !important;
+  max-width: calc(100% - .45em) !important;
+  white-space: normal !important;
+}
+[data-shiyi-block-translation][data-shiyi-layout="compact-stack"] {
+  display: block !important;
+  margin: 0 !important;
+  white-space: normal !important;
+}
+/* Preserve an anonymous control label as one item without touching site CSS. */
+[data-shiyi-source-wrap] {
+  all: unset !important;
+  display: inline !important;
+  min-width: 0 !important;
+  max-width: 100% !important;
+}

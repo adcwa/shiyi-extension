@@ -1,0 +1,11 @@
+import { spawnSync } from 'node:child_process';
+import os from 'node:os';
+import path from 'node:path';
+import fs from 'node:fs';
+const candidates = [process.env.SHIYI_TEST_PYTHON, 'python3', path.join(os.homedir(), '.pyenv/shims/python3')].filter(Boolean);
+const versions = path.join(os.homedir(), '.pyenv/versions');
+if (fs.existsSync(versions)) for (const name of fs.readdirSync(versions).reverse()) candidates.push(path.join(versions, name, 'bin/python3'));
+const python = candidates.find(candidate => spawnSync(candidate, ['-c', 'import playwright.sync_api'], { stdio: 'ignore' }).status === 0);
+if (!python) throw new Error('Install Python Playwright, or set SHIYI_TEST_PYTHON to an interpreter containing it.');
+const run = spawnSync(python, [process.argv[2] || 'tests/extension_e2e.py', ...process.argv.slice(3)], { stdio: 'inherit', env: process.env });
+process.exitCode = run.status ?? 1;

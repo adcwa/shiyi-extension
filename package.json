@@ -1,0 +1,16 @@
+{
+  "name": "dianyi-extension",
+  "version": "0.9.1",
+  "private": true,
+  "type": "module",
+  "description": "点译：本地词库与自定义模型划词翻译",
+  "scripts": {
+    "build": "node scripts/build.mjs",
+    "test": "node --test tests/*.test.mjs",
+    "check": "node scripts/check.mjs",
+    "test:e2e": "node scripts/e2e.mjs",
+    "test:page": "node scripts/e2e.mjs tests/page_translation_e2e.py",
+    "test:long": "node scripts/e2e.mjs tests/long_text_regression.py"
+  },
+  "engines": { "node": ">=20" }
+}
