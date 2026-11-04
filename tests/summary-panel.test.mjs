@@ -109,10 +109,21 @@ test('native panel binding starts one real SSE request and reconnecting reuses i
 });
 test('popup open preserves the synchronous tab gesture and deduplicates native open and bind', async t => {
   const f = await fixture(t);
+  const requests=[],ensure=f.summaries.ensure.bind(f.summaries);
+  f.summaries.ensure=(...args)=>{requests.push(args);return ensure(...args);};
   const opening = f.panels.open(1, 'technical');
   assert.deepEqual(f.opened, [1]);
   f.connect(1); await opening; await f.complete(1); await delay(400);
   assert.equal(f.calls.length, 1); assert.equal((await f.summaries.snapshot(1)).preset, 'technical');
+  assert(requests.some(args=>args[2]?.manual===true),'An explicit gesture must survive concurrent native binding as a manual request');
+});
+test('explicit summary survives a focus change while automatic visibility remains restricted',async t=>{
+  const f=await fixture(t),requests=[],ensure=f.summaries.ensure.bind(f.summaries);
+  f.summaries.ensure=(...args)=>{requests.push(args);return ensure(...args);};
+  await f.panels.open(2,'general');await f.complete(2);
+  assert.equal(f.calls.length,1);assert(requests.some(args=>args[0]===2&&args[2]?.manual===true));
+  const port=f.connect(1,false);await delay(350);assert.equal(f.calls.length,1);
+  port.disconnect();
 });
 test('switching tabs never rebinds an existing panel or auto-summarizes an unopened page', async t => {
   const f = await fixture(t), port = f.connect(1); await f.complete(1);

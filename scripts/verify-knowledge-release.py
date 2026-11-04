@@ -14,13 +14,14 @@ VERSION = json.loads((ROOT/'package.json').read_text())['version']
 RELEASES, OUT = ROOT/'releases', ROOT/'verification'
 RELEASE, ARCHIVE = RELEASES/f'dianyi-{VERSION}', RELEASES/f'dianyi-chrome-edge-{VERSION}.zip'
 sha = lambda data: hashlib.sha256(data).hexdigest()
-names = ['unit', 'knowledge', 'knowledge-native', 'knowledge-browser-code', 'shared-models']
+names = ['unit', 'knowledge', 'knowledge-native', 'knowledge-browser-code', 'shared-models', 'automatic-summary']
 reports = {name: json.loads((OUT/f'{name}-{VERSION}.json').read_text()) for name in names}
 for name, report in reports.items():
     assert report['version'] == VERSION and report['result'] == 'pass', name
-assert reports['unit']['passed'] >= 164 and reports['unit']['failed'] == 0
-assert len(reports['knowledge']['checks']) == 15 and len(reports['knowledge-native']['checks']) == 11
+assert reports['unit']['passed'] >= 174 and reports['unit']['failed'] == 0
+assert len(reports['knowledge']['checks']) == 15 and len(reports['knowledge-native']['checks']) == 13
 assert len(reports['shared-models']['checks']) == 14
+assert len(reports['automatic-summary']['checks']) == 7
 checked = subprocess.run(['rtk', 'proxy', 'npm', 'run', 'check'], cwd=ROOT, text=True, capture_output=True)
 assert checked.returncode == 0, checked.stdout+checked.stderr
 
@@ -115,7 +116,7 @@ report = {
     'version': VERSION, 'result': 'pass', 'zip': ARCHIVE.name,
     'bytes': ARCHIVE.stat().st_size, 'sha256': sha(ARCHIVE.read_bytes()),
     'production_files': len(expected), 'production_scripts': len(list((ROOT/'src').rglob('*.js'))),
-    'unit_tests': reports['unit']['passed'], 'background_browser_checks': 15, 'native_panel_checks': 11, 'shared_models_upgrade_checks': 14,
+    'unit_tests': reports['unit']['passed'], 'background_browser_checks': 15, 'native_panel_checks': 13, 'shared_models_upgrade_checks': 14,'automatic_summary_checks':7,
     'source_package_byte_match': True, 'browser_tested_production_bytes_unchanged': True,
     'new_default_permissions': ['alarms', 'unlimitedStorage'], 'csp_and_host_permissions_unchanged_since': '0.12.1',
     'no_history_permission': 'history' not in manifest['permissions'], 'global_side_panel_disabled': True,
@@ -123,7 +124,8 @@ report = {
     'all_packaged_html_local_links_valid': True, 'historical_zips_unchanged': historical,
     'unpacked_install_directories_synced': synced,
     'native_scope': reports['knowledge-native']['scope'],
-    'limitations': ['No paid-provider semantic/account test', 'Native Edge and physical resize gestures not verified', 'Legacy translation browser suites and unchanged native Codex helper not rerun', 'Browser-off schedules backfill when running again'],
+    'automatic_summary_default':False,'manual_summary_independent':True,
+    'limitations': ['No paid-provider semantic/account test', 'Native Edge and physical resize gestures not verified', 'Legacy translation browser suites and unchanged native Codex helper not rerun', 'Browser-off schedules backfill only when automatic summary is enabled'],
 }
 (OUT/f'knowledge-release-{VERSION}.json').write_text(json.dumps(report, ensure_ascii=False, indent=2)+'\n')
 print(json.dumps({key: report[key] for key in ['version', 'result', 'zip', 'bytes', 'sha256', 'production_files']}, ensure_ascii=False))

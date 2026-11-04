@@ -35,6 +35,7 @@ try:
    def api(kind,**fields):
     reply=ui.evaluate('m=>chrome.runtime.sendMessage(m)',{'type':'SHIYI/'+kind,**fields});assert reply and reply.get('ok'),reply;return reply.get('data')
    api('SAVE_SUMMARY_PROFILE',profile={'provider':'custom','name':'Local knowledge fixture','endpoint':origin+'/v1','model':'knowledge-fixture','auth':'none','timeoutSeconds':5,'rememberKey':False},apiKey='');api('SAVE_SUMMARY_PREFS',prefs={'preset':'general','prompts':{}})
+   api('AUTO_SUMMARY_SET',enabled=True)
    a=context.new_page();a.goto(origin+'/first');b=context.new_page();b.goto(other+'/second');ui.bring_to_front()
    def wait(fn,seconds=15):
     until=time.monotonic()+seconds

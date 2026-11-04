@@ -118,12 +118,12 @@ function model() {
 function summarySettings() {
   return `<div class="page-heading"><div><h1>总结设置</h1><p>从模型库选择总结模型，再设置场景、提示词与回顾计划。</p></div></div>` + layout(
     scenarioConnections(state, 'summary') + `<section class="card"><div class="section-title">${icon('spark')}<h2>总结场景与提示词</h2></div><p class="section-description">自动模式先识别主题，再应用相应预设。只分析当前网页，不进行额外联网检索。</p><form id="summary-preferences"><label class="form-label" for="default-summary-preset">默认总结方式</label><select class="input" id="default-summary-preset">${Object.entries(SUMMARY_PRESETS).map(([key, value]) => `<option value="${key}" ${state.summaryPrefs.preset === key ? 'selected' : ''}>${value.name}</option>`).join('')}</select><div class="summary-prompts">${Object.entries(SUMMARY_PRESETS).filter(([key]) => key !== 'auto').map(([key, value]) => `<details><summary>${value.name}</summary><label class="sr-only" for="prompt-${key}">${value.name}提示词</label><textarea class="input" id="prompt-${key}" data-summary-prompt="${key}" maxlength="6000" rows="5">${esc(state.summaryPrefs.prompts?.[key] || value.prompt)}</textarea><button type="button" class="link-btn" data-reset-summary-prompt="${key}">恢复预设</button></details>`).join('')}</div><p class="field-help">每个提示词最多 6000 字符。保存后应用于下一次总结，不自动重跑已有结果。</p><button class="btn primary" type="submit">保存总结偏好</button></form></section>`,
-    note('book', '侧栏专心展示总结。', '网页在后台自动归纳并存入轨迹。点击弹窗最上方“查看本页总结”或网页右键打开侧栏，直接读取已有结果。侧栏可停止、复制、导出，拖动浏览器分隔线即可调宽。', '选择通用对话模型', '默认推荐 qwen-flash。qwen-mt-* 专用翻译模型不支持总结。生成内容按网页资料归纳，仍需自行核对关键结论。'));
+    note('book', '侧栏专心展示总结。', '自动总结默认关闭，弹窗顶部可一键开启。点击“总结当前网页”或网页右键可手动总结，优先读取本地结果。侧栏可停止、复制、导出，拖动浏览器分隔线即可调宽。', '选择通用对话模型', '默认推荐 qwen-flash。qwen-mt-* 专用翻译模型不支持总结。生成内容按网页资料归纳，仍需自行核对关键结论。'));
 }
 function sites() {
   return heading('READY ON EVERY PAGE.', '默认开启，按需停用。', '普通网页可直接划词。把不需要使用点译的网站加入黑名单即可。') + layout(
     `<section class="card"><div class="section-title">${icon('globe')}<h2>网站黑名单。</h2></div><p class="section-description">黑名单中的网站不显示划词工具、词库标记或整页译文。</p><form id="site-form"><label class="form-label" for="site-input">停用网站</label><div class="domain-add"><input class="input" id="site-input" required placeholder="例如：example.com，或粘贴网页地址" autocomplete="off" spellcheck="false" maxlength="2048"><button class="btn primary" type="submit">加入黑名单</button></div><p class="field-help">域名及其子域名都会停用，覆盖 HTTP、HTTPS 和不同端口；恢复后立即生效。</p><p class="field-error" id="site-error" role="alert"></p></form><div class="domain-list">${state.blacklist.length ? state.blacklist.map(site => `<div class="domain-item"><div><div class="domain-name">${esc(site)}</div><small>该域名及其子域名已停用</small></div><div class="domain-actions"><button class="btn small" data-site-remove="${esc(site)}" aria-label="恢复 ${esc(site)}">恢复使用</button></div></div>`).join('') : `<div class="empty" style="padding:37px 15px 20px">${icon('globe')}<h3>所有普通网页已默认开启。</h3><p>黑名单为空，无需逐站添加或开启。<br>选中文字，点击翻译，或使用鼠标右键菜单。</p></div>`}</div></section><p class="small-text muted">加入黑名单会立即移除标记、还原译文并取消该网站的翻译请求。词库和模型配置保留。</p>`,
-    note('globe', '右键，一步暂停或恢复。', '在网页中右键打开“点译”，切换“在此网站启用点译”。工具栏浮窗也提供同样的开关。', '默认开启，遵循黑名单', '网页会自动总结并存入本地轨迹，使用独立总结模型。翻译仍由选区或整页入口主动发起。'));
+    note('globe', '右键，一步暂停或恢复。', '在网页中右键打开“点译”，切换“在此网站启用点译”。工具栏浮窗也提供同样的开关。', '默认开启，遵循黑名单', '自动总结默认关闭，开启后使用总结模型额度并存入本地轨迹。翻译仍由选区或整页入口主动发起。'));
 }
 function pageCacheCard() {
   const cache = state.pageCache || { count: 0, bytes: 0 };
@@ -137,7 +137,7 @@ function dataPage() {
 function help() {
   return heading('A LITTLE HELP. A BETTER READ.', '从一次划词开始。', '连接模型后即可在普通网页划词，也可右键翻译选区或整页。') + layout(
     `<section class="card"><div class="section-title">${icon('book')}<h2>开始阅读。</h2></div><ol class="help-steps"><li><div><strong>连接你自己的模型</strong><p>在“模型库”中选择厂家，填入 API Key 后点击“连接并保存”；可保存多个 Key，指定默认和备用。也可选择“本机 Codex”，按指引复用本机登录。</p><a class="link-btn" href="#model">打开模型库 ${icon('arrow')}</a></div></li><li><div><strong>打开网页即可使用</strong><p>普通网页默认开启，无需逐站授权或添加白名单。需要停用时，在插件浮窗或右键菜单关闭此网站，加入黑名单。</p></div></li><li><div><strong>选中文字，点击目标语言翻译</strong><p>胶囊只显示“中文”等目标语言；点击语言即翻译，下拉切换并记住语言，更多中设置语境。短选区成功后自动保存；长选区或跨块选区按完整段落对照，不添加下划线或括号。选区最多 16000 字符。</p></div></li><li><div><strong>回到文字身边，随时查看与修改</strong><p>短词悬浮查看释义，可编辑或删除。长文可点击插件菜单“翻译当前页面”，选择双语对照或仅译文；右下角控制条支持切换、停止、继续、重试与恢复原文。</p></div></li></ol></section><section class="card"><div class="section-title">${icon('help')}<h2>常见问题。</h2></div><ul class="privacy-list"><li>${icon('arrow')}<div>为什么新网站没有下划线？<small>确认网站不在黑名单中，且词库已有当前目标语言对应的词句。浏览器扩展详情中的网站访问权限需允许。</small></div></li><li>${icon('arrow')}<div>重新打开浏览器后需要填写密钥？<small>只保留本次会话的密钥不会跨浏览器重启；可勾选“在此浏览器长期记住密钥”。</small></div></li><li>${icon('arrow')}<div>哪些页面暂不支持？<small>浏览器内部页、扩展商店、内置 PDF、图片和 Canvas 文字；iframe 和 Shadow DOM 组件内的内容。代码、输入值与可编辑内容保留。整页翻译覆盖正文、导航及控件标签。</small></div></li><li>${icon('arrow')}<div>如何安装或升级？<small>把安装包解压，在 Chrome / Edge 的扩展管理页打开开发者模式，选择“加载已解压的扩展”，选择包含 manifest.json 的文件夹。升级时保留原文件夹并在扩展页重新加载；不要卸载重装。</small></div></li></ul></section>`,
-    note('leaf', '不打断，是最好的陪伴。', '选区翻译由点击语言、按段或整页入口发起。网页自动总结独立在后台运行，可在轨迹查看，黑名单网站不处理。整页模式期间暂停下划线和括号，普通复制不计入词库。', '遇到无法连接？', '核对地址、模型名称、密钥与额度；服务必须兼容 Chat Completions。没有共享账户或内置付费模型。'));
+    note('leaf', '不打断，是最好的陪伴。', '选区翻译由点击语言、按段或整页入口发起。开启自动总结后在后台运行，可在轨迹查看，黑名单网站不处理。整页模式期间暂停下划线和括号，普通复制不计入词库。', '遇到无法连接？', '核对地址、模型名称、密钥与额度；服务必须兼容 Chat Completions。没有共享账户或内置付费模型。'));
 }
 function collectPrefs() {
   const draft = prefsDraft || { ...state.prefs };
@@ -232,7 +232,7 @@ document.addEventListener('submit', event => {
     await api('SAVE_SUMMARY_PREFS', { prefs: { preset: document.getElementById('default-summary-preset').value, prompts } });
     await refreshData(); notify('总结偏好已保存');
   });
-  if(form.id==='knowledge-preferences')busy(button,async()=>{const prompts=Object.fromEntries([...form.querySelectorAll('[data-knowledge-prompt]')].map(n=>[n.dataset.knowledgePrompt,n.value]));await api('KNOWLEDGE_PREFS',{prefs:{time:document.getElementById('knowledge-time').value,timeZone:document.getElementById('knowledge-zone').value,prompts}});await refreshData();notify('回顾设置已保存');});
+  if(form.id==='knowledge-preferences')busy(button,async()=>{const prompts=Object.fromEntries([...form.querySelectorAll('[data-knowledge-prompt]')].map(n=>[n.dataset.knowledgePrompt,n.value]));await api('KNOWLEDGE_PREFS',{prefs:{autoSummary:document.getElementById('auto-summary-setting').checked,time:document.getElementById('knowledge-time').value,timeZone:document.getElementById('knowledge-zone').value,prompts}});await refreshData();notify('回顾设置已保存');});
   if (form.id === 'site-form') busy(button, async () => {
     const error = document.getElementById('site-error'); error.textContent = '';
     try {

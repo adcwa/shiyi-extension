@@ -1,7 +1,7 @@
 import { assert, safeSource } from './core.js';
 
 export const KNOWLEDGE_KINDS = { day: '每日总结', week: '每周总结', month: '每月总结', year: '每年总结', analysis: '专题分析' };
-export const DEFAULT_KNOWLEDGE_PREFS = Object.freeze({ time: '18:00', timeZone: 'Asia/Shanghai', prompts: {} });
+export const DEFAULT_KNOWLEDGE_PREFS = Object.freeze({ autoSummary: false, time: '18:00', timeZone: 'Asia/Shanghai', prompts: {} });
 export function knowledgeSource(raw,title) {
   const source=safeSource(raw,title);if(!source.url)return source;
   const url=new URL(raw),allowed=/^(?:id|ids|p|page|article|articleId|doc|docId|documentId|slug|q|query|search|path|tab|lang|language|version|v|project|projectId|item|itemId)$/i;
@@ -12,6 +12,7 @@ export function knowledgeSource(raw,title) {
 }
 export function cleanKnowledgePrefs(input = {}) {
   const value = { ...DEFAULT_KNOWLEDGE_PREFS, ...input };
+  assert(typeof value.autoSummary==='boolean','INVALID_INPUT','请选择是否开启自动总结。');
   assert(/^([01]\d|2[0-3]):[0-5]\d$/.test(value.time), 'INVALID_INPUT', '请选择有效的每日总结时间。');
   try { new Intl.DateTimeFormat('en', { timeZone: value.timeZone }).format(); } catch { assert(false, 'INVALID_INPUT', '请填写有效的时区，例如 Asia/Shanghai。'); }
   const prompts = {};
@@ -20,7 +21,7 @@ export function cleanKnowledgePrefs(input = {}) {
     assert(text === undefined || typeof text === 'string' && text.length <= 6000, 'INVALID_INPUT', '每项回顾提示词最多 6000 字符。');
     if (text?.trim()) prompts[key] = text.trim();
   }
-  return { time: value.time, timeZone: value.timeZone, prompts };
+  return { autoSummary:value.autoSummary, time: value.time, timeZone: value.timeZone, prompts };
 }
 export function localParts(time, timeZone) {
   return Object.fromEntries(new Intl.DateTimeFormat('en-CA', { timeZone, year: 'numeric', month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit', hourCycle: 'h23' }).formatToParts(new Date(time)).map(p => [p.type, p.value]));

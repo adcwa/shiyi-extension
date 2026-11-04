@@ -6,8 +6,8 @@ import { hasUsableConnection } from '../lib/connections.js';
 const root = document.getElementById('popup'); root.style.cssText = 'padding:0';
 let state, tabId, busy = false, pageMode = 'bilingual', polling = false;
 function summarySection() {
-  const profile = state.summaryProfile, ready = hasUsableConnection(state, 'summary');
-  return `<section class="popup-section summary-section"><div class="page-heading"><strong>${icon('spark')}网页总结</strong><button class="link-btn" data-open="summary">总结设置</button></div><label class="sr-only" for="summary-preset">总结方式</label><select class="input" id="summary-preset">${Object.entries(SUMMARY_PRESETS).map(([key, value]) => `<option value="${key}" ${state.summaryPrefs.preset === key ? 'selected' : ''}>${value.name}</option>`).join('')}</select><button class="btn primary page-start" id="summarize-page" ${state.tab?.supported && state.tab?.enabled ? '' : 'disabled'}>${icon('spark')}${ready ? '查看本页总结' : '选择总结模型'}</button><div class="knowledge-actions"><button class="link-btn" data-open="trails">我的轨迹</button><button class="link-btn" data-open="reviews">阅读回顾</button></div><p class="page-note">${ready ? esc(profile.model) + ' · 后台自动总结，打开读取本地结果' : '从模型库选择，无需重复填写 Key'}</p></section>`;
+  const profile = state.summaryProfile, ready = hasUsableConnection(state, 'summary'), automatic = !!state.knowledgePrefs.autoSummary;
+  return `<section class="popup-section summary-section"><div class="page-heading"><strong>${icon('spark')}网页总结</strong><button class="link-btn" data-open="summary">总结设置</button></div><div class="site-row auto-summary-row"><div><strong>自动总结</strong><p id="auto-summary-note">${automatic ? '后台网页总结与定时回顾 · 使用模型额度' : '已关闭 · 仍可手动总结当前网页'}</p></div><button class="switch" role="switch" aria-checked="${automatic}" aria-label="自动总结" aria-describedby="auto-summary-note" id="auto-summary-switch"></button></div><label class="sr-only" for="summary-preset">总结方式</label><select class="input" id="summary-preset">${Object.entries(SUMMARY_PRESETS).map(([key, value]) => `<option value="${key}" ${state.summaryPrefs.preset === key ? 'selected' : ''}>${value.name}</option>`).join('')}</select><button class="btn primary page-start" id="summarize-page" ${state.tab?.supported && state.tab?.enabled ? '' : 'disabled'}>${icon('spark')}${ready ? '总结当前网页' : '选择总结模型'}</button><div class="knowledge-actions"><button class="link-btn" data-open="trails">我的轨迹</button><button class="link-btn" data-open="reviews">阅读回顾</button></div><p class="page-note">${ready ? esc(profile.model) + ' · 优先读取本地结果' : '从模型库选择，无需重复填写 Key'}</p></section>`;
 }
 async function load() {
   state = await api('UI_STATE', { tabId }); if (state.tab?.page?.active) pageMode = state.tab.page.mode; render();
@@ -46,6 +46,7 @@ async function setSiteEnabled(enabled) {
 }
 root.addEventListener('click', event => {
   const button = event.target.closest('button'); if (!button) return;
+  if (button.id === 'auto-summary-switch') { action(() => api('AUTO_SUMMARY_SET', { enabled: !state.knowledgePrefs.autoSummary }), button); return; }
   if (button.id === 'summarize-page') {
     const ready = hasUsableConnection(state, 'summary');
     if (!ready) { api('OPEN_OPTIONS', { section: 'summary' }).then(() => window.close()).catch(error => notify(error.message)); return; }
@@ -91,9 +92,9 @@ chrome.runtime.onMessage.addListener(message => { if (message?.type === 'SHIYI/U
     if (busy || polling || document.hidden) return; polling = true;
     try {
       const next = await api('UI_STATE', { tabId });
-      const before = state.tab?.page?.active, after = next.tab?.page?.active;
+      const before = state.tab?.page?.active, after = next.tab?.page?.active, autoChanged = state.knowledgePrefs.autoSummary !== next.knowledgePrefs.autoSummary;
       state = next;
-      if (before !== after) render(); else updatePageView();
+      if (before !== after || autoChanged) render(); else updatePageView();
     } catch {} finally { polling = false; }
   }, 1100);
 })().catch(error => { root.innerHTML = `<div class="empty"><h3>暂时无法打开点译。</h3><p>${esc(error.message)}</p><button class="btn primary" id="retry-popup">重试</button></div>`; document.getElementById('retry-popup').onclick = () => location.reload(); });

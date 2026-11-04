@@ -8,17 +8,23 @@ import { dayKey,period,zonedTime,nextDaily,cleanKnowledgePrefs,evidenceParts,pla
 import { knowledgeFiles,knowledgeZip,knowledgeCSV,knowledgeJSONL,knowledgeBundleMarkdown,knowledgeMarkdown } from '../src/lib/knowledge-export.js';
 
 const delay=ms=>new Promise(r=>setTimeout(r,ms));
+test('automatic summary is opt-in for fresh installs and old preferences',()=>{
+ assert.equal(cleanKnowledgePrefs().autoSummary,false);
+ assert.equal(cleanKnowledgePrefs({time:'18:00',prompts:{}}).autoSummary,false);
+ assert.equal(cleanKnowledgePrefs({autoSummary:true}).autoSummary,true);
+ assert.throws(()=>cleanKnowledgePrefs({autoSummary:'false'}));
+});
 test('reading-list excerpts remove Markdown syntax but preserve text, link labels and code',()=>{const value=plainKnowledgeText('# 标题\n\n- 重要依据\n\n```javascript\nconst localKnowledge = true;\n```\n[来源](https://example.org) **关键**');assert.equal(value,'标题 重要依据 const localKnowledge = true; 来源 关键');});
 test('knowledge source links retain ordinary article IDs while removing auth and unnecessary parameters',()=>{const source=knowledgeSource('https://example.org/view?id=42&page=2&token=private&signature=hidden&utm_source=ad','Source');assert.equal(source.url,'https://example.org/view?id=42&page=2');assert.equal(knowledgeSource('https://example.org/#/docs/guide','Guide').url,'https://example.org/#/docs/guide');});
 async function until(fn){for(let n=0;n<400;n++){if(await fn())return;await delay(10);}assert.fail('Knowledge task timed out');}
-async function fixture(t,{time=Date.parse('2026-11-04T10:30:00Z'),configured=true}={}){
+async function fixture(t,{time=Date.parse('2026-11-04T10:30:00Z'),configured=true,autoSummary=true}={}){
  const repository=createKnowledgeStore(new IDBFactory()),calls=[],alarms=new Map(),tabs=new Map([[1,{id:1,url:'https://example.org/article',title:'Article',active:false,status:'complete'}],[2,{id:2,url:'https://other.example/guide',title:'Other',active:false,status:'complete'}]]);
  let clock=time,mode='ok';
  const server=http.createServer(async(req,res)=>{let body='';for await(const part of req)body+=part;const data=JSON.parse(body);calls.push(data);if(mode==='403'){res.writeHead(403);res.end('{"error":{"code":"Forbidden"}}');return;}res.writeHead(200,{'Content-Type':'text/event-stream'});res.write('data: '+JSON.stringify({choices:[{delta:{content:'## 阅读要点\n\n从来源提炼事实与依据。'}}]})+'\n\n');if(mode==='slow')return;if(mode==='delayed'){setTimeout(()=>res.end('data: [DONE]\n\n'),180);return;}res.end('data: [DONE]\n\n');});
  await new Promise(r=>server.listen(0,'127.0.0.1',r));
  const profile={provider:'custom',model:'local-knowledge-fixture',name:'Local',auth:'none',endpoint:`http://127.0.0.1:${server.address().port}/v1/chat/completions`,timeoutSeconds:5};
- const value={blacklist:[],summaryConfigured:configured,summaryProfile:profile,summaryPrefs:{preset:'general',prompts:{}},knowledgePrefs:{time:'18:00',timeZone:'Asia/Shanghai',prompts:{}},modelConnections:{summary:{defaultId:'one',items:[{id:'one',profile,backup:false}]}}};
- const chromeApi={runtime:{sendMessage:async()=>{},getPlatformInfo:async()=>({})},permissions:{contains:async()=>true},alarms:{create:async(name,info)=>alarms.set(name,info)},tabs:{get:async id=>{if(!tabs.has(id))throw Error('closed');return {...tabs.get(id)};}},scripting:{executeScript:async({target})=>{const tab=tabs.get(target.tabId);return [{result:{url:tab.url,title:tab.title,text:tab.text||'Original visible evidence about reading and local summaries. No forms are read.',chars:80,truncated:false}}];}}};
+ const value={blacklist:[],summaryConfigured:configured,summaryProfile:profile,summaryPrefs:{preset:'general',prompts:{}},knowledgePrefs:{autoSummary,time:'18:00',timeZone:'Asia/Shanghai',prompts:{}},modelConnections:{summary:{defaultId:'one',items:[{id:'one',profile,backup:false}]}}};
+ const chromeApi={runtime:{sendMessage:async()=>{},getPlatformInfo:async()=>({})},permissions:{contains:async()=>true},alarms:{create:async(name,info)=>alarms.set(name,info),clear:async name=>alarms.delete(name)},tabs:{get:async id=>{if(!tabs.has(id))throw Error('closed');return {...tabs.get(id)};}},scripting:{executeScript:async({target})=>{const tab=tabs.get(target.tabId);return [{result:{url:tab.url,title:tab.title,text:tab.text||'Original visible evidence about reading and local summaries. No forms are read.',chars:80,truncated:false}}];}}};
  const settings={config:async()=>structuredClone(value),resolveSummaryProfile:async profile=>({profile,apiKey:''})};
  let service=createKnowledgeManager({chromeApi,settings,repository,permissionGranted:async()=>true,now:()=>clock});await service.initialize();
  t.after(async()=>{service.cancelAll('test ended');await delay(20);server.closeAllConnections();await new Promise(r=>server.close(r));await repository.close();});
@@ -134,3 +140,65 @@ test('deleting one repeated visit clears reviews that quoted its notes while ret
 });
 
 test('daily review waits for already-captured page jobs before its first summary request',async t=>{const f=await fixture(t);f.mode('delayed');const page=await f.service.captureTab(1);await until(()=>f.calls.length===1);const review=await f.service.createReview({kind:'day',date:'2026-11-04'});assert.equal((await f.repository.get('jobs',review.id)).status,'awaiting-input');await f.complete(page.id);await f.complete(review.id);assert.equal(f.calls.length,2);assert.deepEqual((await f.repository.get('summaries',review.id)).sourceIds,[page.id]);});
+
+test('off stores only visit metadata: navigation, panel visibility, alarms and resume never request a model',async t=>{
+ const f=await fixture(t,{autoSummary:false});let extracted=0;
+ const original=f.chromeApi.scripting.executeScript;f.chromeApi.scripting.executeScript=async args=>{extracted++;return original(args);};
+ assert.equal((await f.service.captureTab(1)).automaticDisabled,true);
+ await f.service.ensure(1);await f.service.captureTab(2);await f.service.runDue();await f.service.resume();await delay(80);
+ assert.equal(f.calls.length,0);assert.equal(extracted,0);assert.equal((await f.repository.all('snapshots')).length,0);assert.equal((await f.repository.all('jobs')).length,0);
+ assert.equal((await f.service.list()).total,2);assert(!f.alarms.has('dianyi-knowledge-daily'));
+ assert.equal((await f.service.snapshot(1)).automaticDisabled,true);
+});
+test('manual popup or context-menu ensure, re-summary and saved snapshot retry work while off',async t=>{
+ const f=await fixture(t,{autoSummary:false});const r=await f.service.ensure(1,undefined,{manual:true});await f.complete(r.id);
+ assert.equal((await f.repository.get('summaries',r.id)).automatic,false);
+ const cached=await f.service.ensure(1,undefined,{manual:true});assert.equal(cached.id,r.id);assert.equal(f.calls.length,1);
+ const fresh=await f.service.start(1);await f.complete(fresh.id);
+ const v=(await f.service.list()).items[0],retry=await f.service.retry(v.id);await f.complete(retry.id);
+ assert.equal(f.calls.length,3);assert.equal(f.value.knowledgePrefs.autoSummary,false);assert(!f.alarms.has('dianyi-knowledge-daily'));
+});
+test('turning off aborts streaming auto work and pauses queued work even after restart or model resume',async t=>{
+ const f=await fixture(t);f.mode('slow');const a=await f.service.captureTab(1);await until(()=>f.calls.length===1);
+ await until(async()=>!!(await f.repository.get('summaries',a.id)).text);
+ const b=await f.service.captureTab(2);f.value.knowledgePrefs.autoSummary=false;await f.service.setAutomatic(false);await delay(80);
+ assert.equal((await f.repository.get('jobs',a.id)).status,'paused-auto');assert.equal((await f.repository.get('jobs',b.id)).status,'paused-auto');
+ assert((await f.repository.get('summaries',a.id)).text);assert(!f.alarms.has('dianyi-knowledge-daily'));
+ await f.service.resume();await f.service.runDue();await f.restart();await f.service.resume();await delay(80);assert.equal(f.calls.length,1);
+ f.mode('ok');const explicit=await f.service.ensure(2,undefined,{manual:true});assert.equal(explicit.id,b.id);await f.complete(explicit.id);assert.equal(f.calls.length,2);
+ assert.equal((await f.repository.get('jobs',a.id)).status,'paused-auto');
+});
+test('switching off preserves a running manual stream and does not enqueue automatic reviews',async t=>{
+ const f=await fixture(t);f.mode('delayed');const manual=await f.service.start(1);await until(()=>f.calls.length===1);
+ f.value.knowledgePrefs.autoSummary=false;await f.service.setAutomatic(false);await f.complete(manual.id);await f.service.runDue();
+ assert.equal(f.calls.length,1);assert.equal((await f.service.list({view:'reviews'})).total,0);
+});
+test('manual yearly review promotes captured paused evidence and every review dependency while off',async t=>{
+ const f=await fixture(t,{configured:false});const page=await f.service.captureTab(1);await until(async()=>(await f.repository.get('jobs',page.id)).status==='waiting');
+ f.value.knowledgePrefs.autoSummary=false;await f.service.setAutomatic(false);f.value.summaryConfigured=true;
+ const year=await f.service.createReview({kind:'year',date:'2026-11-04'});await f.complete(year.id);
+ const records=await f.repository.all('summaries');assert(records.some(s=>s.kind==='month'));assert(records.some(s=>s.kind==='day'));
+ assert(records.every(s=>s.automatic===false));assert.equal(f.calls.length,4);assert.equal(f.value.knowledgePrefs.autoSummary,false);
+});
+test('enabling schedules future automation without draining old paused jobs',async t=>{
+ const f=await fixture(t,{configured:false});const old=await f.service.captureTab(1);await until(async()=>(await f.repository.get('jobs',old.id)).status==='waiting');
+ f.value.knowledgePrefs.autoSummary=false;await f.service.setAutomatic(false);f.value.summaryConfigured=true;
+ f.value.knowledgePrefs.autoSummary=true;await f.service.setAutomatic(true);await delay(80);
+ assert(f.alarms.has('dianyi-knowledge-daily'));assert.equal(f.calls.length,0);
+ const fresh=await f.service.captureTab(2);await f.complete(fresh.id);assert.equal(f.calls.length,1);
+ const revisited=await f.service.captureTab(1);await f.complete(revisited.id);assert.equal(revisited.id,old.id);assert.equal(f.calls.length,2);
+});
+test('legacy auto jobs with no automatic flag remain paused after an opt-out upgrade',async t=>{
+ const f=await fixture(t,{configured:false});const r=await f.service.captureTab(1);await until(async()=>(await f.repository.get('jobs',r.id)).status==='waiting');
+ const s=await f.repository.get('summaries',r.id);delete s.automatic;await f.repository.write({summaries:[s]});
+ delete f.value.knowledgePrefs.autoSummary;f.value.summaryConfigured=true;await f.restart();await f.service.resume();await f.service.runDue();await delay(80);
+ assert.equal(f.calls.length,0);assert.equal((await f.repository.get('jobs',r.id)).status,'paused-auto');
+});
+test('legacy scheduled reviews keep automatic ownership through lower-level dependencies',async t=>{
+ const f=await fixture(t,{configured:false,time:Date.parse('2026-11-04T01:00:00Z')});
+ const page=await f.service.captureTab(1);await until(async()=>(await f.repository.get('jobs',page.id)).status==='waiting');
+ const year=await f.service.createReview({kind:'year',date:'2026-11-04',automatic:true});
+ const legacy=await f.repository.get('summaries',year.id);delete legacy.automatic;await f.repository.write({summaries:[legacy]});
+ await f.restart();f.value.summaryConfigured=true;await f.service.resume();await f.complete(year.id);
+ assert((await f.repository.all('summaries')).filter(s=>s.kind!=='page').every(s=>s.automatic!==false));
+});

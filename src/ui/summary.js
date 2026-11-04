@@ -39,16 +39,18 @@ function render() {
   const s = result, hasText = !!s?.text;
   $('#source-title').textContent = s?.source?.title || '当前网页';
   $('#source-detail').textContent = s ? [s.source?.domain, SUMMARY_PRESETS[s.chosen || s.preset]?.name, s.model].filter(Boolean).join(' · ') : '当前标签页 · 优先读取本地总结';
-  $('#summary-status').textContent = s ? statusLabels[s.phase] || '正在准备总结…' : '正在准备总结…';
-  $('#summary-stop').hidden = !active(); $('#summary-retry').hidden = !s || active(); $('#summary-retry').disabled = retryBusy;
+  $('#summary-status').textContent = s?.automaticDisabled&&!hasText?'自动总结已关闭':s ? statusLabels[s.phase] || '正在准备总结…' : '正在准备总结…';
+  $('#summary-stop').hidden = !active(); $('#summary-retry').hidden = active(); $('#summary-retry').disabled = retryBusy;
+  $('#summary-retry').textContent = hasText?'重新总结':'总结当前网页';
   const warnings = [];
   if (s?.stale) warnings.push('网页已变化，正在等待当前页加载后自动总结。');
   if (s?.truncated) warnings.push('本页较长，本次仅纳入前 60,000 字符以内的已加载正文。');
   if (s?.fallback) warnings.push('主题识别结果不完整，已改用通用总结。');
   $('#scope-note').textContent = warnings.join(' '); $('#scope-note').hidden = !warnings.length;
   const message = $('#summary-message'); message.classList.toggle('error', !!s?.error);
-  if (s?.error) { message.replaceChildren(); const title = document.createElement('h2'); title.textContent = s.phase === 'stopped' ? '生成已停止' : '这次总结未完成'; const text = document.createElement('p'); text.textContent = s.error; message.append(title, text); }
-  else if (!hasText) { message.innerHTML = '<p>访问资料会先保存在本地，后台总结完成后显示在这里。</p>'; }
+  if (s?.automaticDisabled&&!hasText) {message.classList.remove('error');message.innerHTML='<p>点击“总结当前网页”手动生成，不会开启自动总结。</p>';}
+  else if (s?.error) { message.replaceChildren(); const title = document.createElement('h2'); title.textContent = s.phase === 'stopped' ? '生成已停止' : '这次总结未完成'; const text = document.createElement('p'); text.textContent = s.error; message.append(title, text); }
+  else if (!hasText) { message.innerHTML = '<p>总结完成后会保存在本地，再次打开即可阅读。</p>'; }
   else message.replaceChildren();
   const parsed = R.parse(s?.text || '', { streaming: s?.phase !== 'complete' });
   artifacts.clear(); parsed.artifacts.forEach(item => artifacts.set(item.id, item));

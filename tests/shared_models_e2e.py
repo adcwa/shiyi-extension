@@ -79,7 +79,7 @@ try:
    report['extension_manager']=manager.locator('extensions-item').evaluate_all('items=>items.map(n=>({id:n.id,data:n.data,text:n.shadowRoot.textContent,buttons:[...n.shadowRoot.querySelectorAll("cr-icon-button,cr-button,button")].map(b=>({id:b.id,label:b.getAttribute("aria-label"),title:b.title}))}))');raise
   wake=context.new_page();wake.goto(f'chrome-extension://{old_id}/options.html#model')
   try:
-   bind();assert ext==old_id;state=api('UI_STATE');assert state['version']==VERSION;assert len(state['modelLibrary']['items'])==2
+   bind();assert ext==old_id;state=api('UI_STATE');assert state['version']==VERSION;assert state['knowledgePrefs']['autoSummary'] is False;assert len(state['modelLibrary']['items'])==2
    assert sorted(e['id'] for e in api('LIBRARY')['entries'])==sorted(word_ids);assert state['vocabularyBackup']['count']==2
    assert state['modelConnections']['translation']['defaultId']==old_translation and state['modelConnections']['summary']['defaultId']==old_summary
    passed('same-directory ZIP upgrade preserves extension identity, original vocabulary IDs, both model choices and local keys')
@@ -106,6 +106,7 @@ try:
    ui.goto(f'chrome-extension://{ext}/options.html#summary');ui.locator('#notice').evaluate('n=>n.replaceChildren()');ui.screenshot(path=str(SHOTS/'summary-desktop.png'),full_page=True)
    ui.set_viewport_size({'width':375,'height':900});assert ui.evaluate('document.documentElement.scrollWidth<=innerWidth');ui.screenshot(path=str(SHOTS/'summary-mobile.png'),full_page=True);ui.set_viewport_size({'width':1440,'height':1000})
    passed('shared model library and summary selectors render in the incumbent desktop and 375px management layout')
+   api('AUTO_SUMMARY_SET',enabled=True)
    a=context.new_page();a.goto(origin+'/article-a');wait(lambda:any(i['phase']=='complete' and 'article-a' in i['title'] for i in api('KNOWLEDGE_LIST')['items']))
    assert calls[-1]['body']['stream'] and calls[-1]['authorization']=='Bearer primary-shared-fixture'
    target=a.locator('#target');target.scroll_into_view_if_needed();box=target.evaluate('n=>{const r=document.createRange();r.selectNodeContents(n);const b=r.getBoundingClientRect();return{x:b.x,y:b.y,w:b.width,h:b.height}}');a.mouse.move(box['x']+.3,box['y']+box['h']/2);a.mouse.down();a.mouse.move(box['x']+box['w']-.3,box['y']+box['h']/2,steps=15);a.mouse.up();a.locator('#shiyi-extension-root .selection-main').click();wait(lambda:any(e['text']=='resilience' for e in api('LIBRARY')['entries']));assert calls[-1]['authorization']=='Bearer primary-shared-fixture';assert api('UI_STATE')['vocabularyBackup']['count']==3

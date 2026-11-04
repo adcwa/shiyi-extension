@@ -10,8 +10,8 @@ export function summaryPanelTab(path) {
   } catch { return null; }
 }
 
-// Availability is per tab; only a visible, explicitly opened panel can launch
-// automatic work. Registering the entry on other tabs never requests a model.
+// Explicit open gestures can request a manual summary. Visibility and navigation
+// use the automatic policy; merely restoring a panel must not spend model quota.
 export function createSummaryPanel({ chromeApi, settings, tabState, summaries, whenReady }) {
   const ports = new Set(), timers = new Map(), selections = new Map(), revisions = new Map();
   const visible = tabId => [...ports].some(port => port.summaryPanelTab === tabId && port.summaryVisible);
@@ -40,9 +40,13 @@ export function createSummaryPanel({ chromeApi, settings, tabState, summaries, w
   }
   async function summarize(tabId, explicit = false) {
     await whenReady();
-    const tab = await sync(tabId);
-    if (!tab || tab.status === 'loading' || !tab.active || (!explicit && !visible(tabId))) return { started: false };
-    return summaries.ensure(tabId, selections.get(tabId));
+    let tab = await sync(tabId);
+    // Native binding may supersede sync while a click is opening the panel.
+    // Recheck permission for the explicitly chosen tab instead of dropping the
+    // user's request because focus or the sync revision changed in the meantime.
+    if(explicit&&!tab){const state=await tabState(tabId,await settings.config());if(state?.enabled)tab=await chromeApi.tabs.get(tabId);}
+    if (!tab || tab.status === 'loading' || (!explicit && (!tab.active || !visible(tabId)))) return { started: false };
+    return summaries.ensure(tabId, selections.get(tabId),{manual:explicit});
   }
   function schedule(tabId) {
     cancelTimer(tabId);

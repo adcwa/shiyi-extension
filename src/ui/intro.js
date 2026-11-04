@@ -8,7 +8,7 @@ if (installed) {
   scope.querySelectorAll('[data-standalone-only]').forEach(node => { node.hidden = true; });
   scope.querySelectorAll('[data-installed-only]').forEach(node => { node.hidden = false; });
 } else {
-  scope.querySelectorAll('[data-package]').forEach(link => { link.href = location.protocol === 'file:' || location.pathname.includes('/src/') ? '../releases/dianyi-chrome-edge-0.14.0.zip' : 'downloads/dianyi-chrome-edge-0.14.0.zip'; });
+  scope.querySelectorAll('[data-package]').forEach(link => { link.href = location.protocol === 'file:' || location.pathname.includes('/src/') ? '../releases/dianyi-chrome-edge-0.14.1.zip' : 'downloads/dianyi-chrome-edge-0.14.1.zip'; });
 }
 
 const toggle = scope.querySelector('.menu-toggle'), menu = scope.getElementById('intro-menu');

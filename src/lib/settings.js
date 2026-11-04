@@ -42,7 +42,7 @@ export function changeConfig(work) {
 }
 export const savePrefs = prefs => changeConfig(value => { value.prefs = cleanPrefs(prefs); });
 export const saveSummaryPrefs = prefs => changeConfig(value => { value.summaryPrefs = cleanSummaryPrefs(prefs); });
-export const saveKnowledgePrefs = prefs => changeConfig(value => { value.knowledgePrefs = cleanKnowledgePrefs(prefs); });
+export const saveKnowledgePrefs = prefs => changeConfig(value => { value.knowledgePrefs = cleanKnowledgePrefs({...value.knowledgePrefs,...prefs}); });
 async function secretFor(purpose, profile) {
   if (profile.auth === 'none' || profile.connectionId === null) return '';
   let id = profile.connectionId;

@@ -61,6 +61,7 @@ try:
                 return reply.get('data')
             message('SAVE_SUMMARY_PROFILE', profile={'provider': 'custom', 'name': 'Native panel fixture', 'endpoint': origin_a+'/v1', 'model': 'local-panel-fixture', 'auth': 'none', 'timeoutSeconds': 5, 'rememberKey': False}, apiKey='')
             message('SAVE_SUMMARY_PREFS', prefs={'preset': 'general'})
+            message('AUTO_SUMMARY_SET',enabled=True)
             ui.wait_for_timeout(300)
             article_a = context.new_page(); article_a.goto(origin_a+'/article-a')
             article_b = context.new_page(); article_b.goto(origin_b+'/article-b')
@@ -98,7 +99,8 @@ try:
                 while time.monotonic() < deadline:
                     if check(): return
                     ui.wait_for_timeout(50)
-                raise AssertionError('Native side panel did not reach the expected state')
+                state={'requests':len(calls),'records':message('KNOWLEDGE_LIST')['items'],'tabs':worker.evaluate('()=>chrome.tabs.query({})'),'panels':[{'url':item['url']} for item in targets() if '/summary.html?' in item['url']]}
+                raise AssertionError('Native side panel did not reach the expected state: '+json.dumps(state,ensure_ascii=False))
             def completed(tab_id):
                 wait(lambda: panel_target(tab_id) and panel_value(tab_id, 'document.querySelector("#summary-status").textContent') == '总结完成')
             def open_panel(article, tab_id):
@@ -185,6 +187,17 @@ try:
             assert article_a.evaluate('innerWidth') == full_width
             open_panel(article_a, a); assert len(calls) == before+1
             passed('removing blacklist resumes background summary without automatically opening the native panel')
+            message('AUTO_SUMMARY_SET',enabled=False)
+            before=len(calls);article_a.goto(origin_a+'/off-popup');ui.wait_for_timeout(650)
+            assert len(calls)==before
+            open_panel(article_a,a);assert len(calls)==before+1
+            assert message('UI_STATE')['knowledgePrefs']['autoSummary'] is False
+            passed('with automation off, the real popup still opens a native panel and manually summarizes without enabling automation')
+            before=len(calls);article_a.goto(origin_a+'/off-visible');wait(lambda:panel_value(a,'document.querySelector("#summary-status").textContent')=='自动总结已关闭')
+            ui.wait_for_timeout(600);assert len(calls)==before
+            panel_value(a,'document.querySelector("#summary-retry").click();true');completed(a)
+            assert len(calls)==before+1
+            passed('visible native sidebar navigation stays idle while off; its manual summary button remains functional')
             assert not errors, errors
             report.update(result='pass', browser=worker.evaluate('()=>navigator.userAgent'), model_requests=len(calls), page_errors=errors, rendered_screenshot=f'knowledge-native-{VERSION}.png')
         finally: context.close()

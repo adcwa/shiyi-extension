@@ -8,7 +8,7 @@ import { cleanKnowledgePrefs, cleanKnowledgeFilter, DEFAULT_KNOWLEDGE_PREFS, KNO
 export function createKnowledgeManager({ chromeApi, settings, repository, permissionGranted, now = () => Date.now() }) {
   const tables = Object.fromEntries(['visits','documents','summaries','jobs','meta'].map(name => [name, new Map()]));
   const bindings = new Map(), captures = new Map(), ports = new Set(), running = new Map();
-  let tail = Promise.resolve(), started = false, pumping = false, scheduling = false, healthError='';
+  let tail = Promise.resolve(), started = false, pumping = false, scheduling = false, healthError='', automaticEnabled=false;
   const loaded = (async () => { for (const name of Object.keys(tables)) for (const row of await repository.all(name)) tables[name].set(row.id, row); })();
   const rows = name => [...tables[name].values()];
   function serial(work) { const task = tail.then(() => loaded).then(work); tail = task.catch(() => {}); return task; }
@@ -19,6 +19,8 @@ export function createKnowledgeManager({ chromeApi, settings, repository, permis
   }
   const config = () => settings.config();
   const prefs = value => cleanKnowledgePrefs(value.knowledgePrefs || DEFAULT_KNOWLEDGE_PREFS);
+  const automatic = record => record?.automatic !== false;
+  const runnable = (record,value) => !automatic(record)||prefs(value).autoSummary;
   const permitted = (source, value) => !!pageOrigin(source?.url) && !blockingSite(source.url, value.blacklist);
   const leaves = record => record.kind === 'page' ? [record.id] : record.sourceIds || [];
   function valid(record, value) {
@@ -35,8 +37,8 @@ export function createKnowledgeManager({ chromeApi, settings, repository, permis
   function stateFor(tabId) {
     const binding = bindings.get(tabId), visit = tables.visits.get(binding?.visitId);
     const summary = tables.summaries.get(visit?.summaryId);
-    if (summary) return { ...summary, tabId, source: visit.source, chars: summary.chars || 0, stale: false,...(visit.error?{phase:'error',error:visit.error}:{}) };
-    if (visit) return { id: visit.id, tabId, source: visit.source, phase: visit.error ? 'error' : 'waiting', text: '', error: visit.error || '', chars: 0, preset: 'general' };
+    if (summary) return { ...summary, automaticDisabled:!automaticEnabled&&automatic(summary),tabId, source: visit.source, chars: summary.chars || 0, stale: false,...(visit.error?{phase:'error',error:visit.error}:{}) };
+    if (visit) return { id: visit.id, tabId, source: visit.source, phase: visit.error ? 'error' : 'waiting', text: '', error: visit.error || '', chars: 0, preset: 'general',automaticDisabled:!automaticEnabled };
     return null;
   }
   function publish() {
@@ -61,9 +63,10 @@ export function createKnowledgeManager({ chromeApi, settings, repository, permis
   }
   async function captureTab(tabId, options = {}) {
     const context = await begin(tabId, options); if (!context) return { started: false };
+    if(!options.manual&&!prefs(await config()).autoSummary){publish();return{started:false,automaticDisabled:true};}
     if (context.tab.status === 'loading' && !options.documentReady) return { started: false };
     const previous = captures.get(tabId);
-    if (previous?.binding === context.binding) return previous.task;
+    if (previous?.binding === context.binding) {if(!options.manual)return previous.task;await previous.task;return captureTab(tabId,options);}
     const task = (async () => {
       try {
         const [extracted] = await chromeApi.scripting.executeScript({ target: { tabId, frameIds: [0] }, func: extractSummaryPage });
@@ -75,7 +78,8 @@ export function createKnowledgeManager({ chromeApi, settings, repository, permis
         const sig = await signature(value, preset);
         return serial(async () => {
           let visit = tables.visits.get(context.binding.visitId); if (!visit) return { started: false };
-          if(!permitted(safeSource(page.url),await config()))return{started:false};
+          const latest=await config();
+          if(!permitted(safeSource(page.url),latest)||!options.manual&&!prefs(latest).autoSummary)return{started:false};
           if (visit.documentId && visit.documentId !== documentId) {
             visit = { ...visit, id: crypto.randomUUID(), visitedAt: now(), parentId: visit.id, documentId: '', summaryId: '' };
             context.binding.visitId = visit.id;
@@ -86,9 +90,14 @@ export function createKnowledgeManager({ chromeApi, settings, repository, permis
           if (!summary) {
             const parent = tables.visits.get(visit.parentId), related = tables.summaries.get(parent?.summaryId);
             const contextIds = related?.phase === 'complete' && valid(related, value) ? [related.id] : [];
-            summary = { id: crypto.randomUUID(), kind: 'page', logicalKey: `page:${documentId}`,revision:rows('summaries').filter(s=>s.logicalKey===`page:${documentId}`).length+1, documentId, signature: sig, source, contextIds, preset,force:!!options.force,phase: 'queued', text: '', error: '', createdAt: now(), updatedAt: now(), chars: page.chars, truncated: !!page.truncated };
+            summary = { id: crypto.randomUUID(), kind: 'page',automatic:!options.manual, logicalKey: `page:${documentId}`,revision:rows('summaries').filter(s=>s.logicalKey===`page:${documentId}`).length+1, documentId, signature: sig, source, contextIds, preset,force:!!options.force,phase: 'queued', text: '', error: '', createdAt: now(), updatedAt: now(), chars: page.chars, truncated: !!page.truncated };
             updates.summaries = [summary]; updates.jobs = [{ id: summary.id, status: 'pending', createdAt: now(), priority: options.force ? 0 : 5 }];
-            if(options.force)updates.meta=[{id:'queue',held:false,error:''}];
+            if(options.force||options.manual)updates.meta=[{id:'queue',held:false,error:''}];
+          }
+          else if(options.manual||tables.jobs.get(summary.id)?.status==='paused-auto'){
+            const job=tables.jobs.get(summary.id);summary={...summary,automatic:options.manual?false:summary.automatic};
+            if(job&&['paused-auto','waiting'].includes(job.status)){summary={...summary,phase:'queued',error:''};updates.jobs=[{...job,status:'pending'}];}
+            updates.summaries=[summary];if(options.manual)updates.meta=[{id:'queue',held:false,error:''}];
           }
           updates.visits.push({ ...visit, title: source.title, domain: source.domain, source, documentId, summaryId: summary.id, error: '' });
           await save(updates); context.binding.loading = false; publish(); void pump();
@@ -129,13 +138,14 @@ export function createKnowledgeManager({ chromeApi, settings, repository, permis
     if (groups.length <= 1) return false;
     assert((summary.reductionDepth||0)<6,'KNOWLEDGE_TOO_LARGE','多轮归纳后资料仍过长，已保留分批结果，请缩小时间或主题范围后重试。');
     await serial(async () => {
-      const children = groups.map(evidence => ({ id: crypto.randomUUID(), kind: 'rollup', logicalKey: summary.logicalKey, title: '分批证据整理', inputIds: [], evidence, sourceIds: summary.sourceIds, range: summary.range, dimension: summary.dimension, phase: 'queued', text: '', error: '', createdAt: now(), updatedAt: now() }));
+      const children = groups.map(evidence => ({ id: crypto.randomUUID(), kind: 'rollup',automatic:automatic(summary), logicalKey: summary.logicalKey, title: '分批证据整理', inputIds: [], evidence, sourceIds: summary.sourceIds, range: summary.range, dimension: summary.dimension, phase: 'queued', text: '', error: '', createdAt: now(), updatedAt: now() }));
       await save({ summaries: [...children, { ...summary, inputIds: children.map(s => s.id), phase: 'queued',reductionDepth:(summary.reductionDepth||0)+1 }], jobs: [...children.map(s => ({ id: s.id, status: 'pending', priority: 1, createdAt: now() })), { ...tables.jobs.get(summary.id), status: 'pending' }] });
     }); return true;
   }
   async function execute(job) {
     let summary = tables.summaries.get(job.id); if (!summary) return;
     const value = await config();
+    if(!runnable(summary,value)){await serial(()=>save({jobs:[{...job,status:'paused-auto'}]}));return;}
     if (summary.kind === 'page') assert(permitted(summary.source, value), 'SITE_DISABLED', '此网站已加入黑名单。');
     else assert(valid(summary, value), 'SITE_DISABLED', '来源已删除或加入黑名单。');
     assert(await accessible(summary),'SITE_DISABLED','来源网页访问权限已被移除。');
@@ -159,12 +169,12 @@ export function createKnowledgeManager({ chromeApi, settings, repository, permis
       await runConnections({ value, purpose: 'summary', signal: controller.signal, allowBackup: () => !emitted,
         resolve: async profile => { const connection = await settings.resolveSummaryProfile(profile); assert(await permissionGranted(profile), 'MODEL_PERMISSION', '请在总结设置重新授权这个连接。'); return connection; },
         onSelected: ({ profile, backup }) => { void patchSummary(job.id, { model: profile.model, connectionName: profile.name, connectionFallback: backup }, current); },
-        run: connection => runSummaryModel({ ...connection, text: input, preset: summary.kind === 'page' ? summary.preset : 'general', prefs: summaryPrefs, signal: controller.signal,
+        run: async connection => {assert(runnable(tables.summaries.get(job.id),await config()),'AUTOMATIC_DISABLED','自动总结已关闭，未发送请求。');return runSummaryModel({ ...connection, text: input, preset: summary.kind === 'page' ? summary.preset : 'general', prefs: summaryPrefs, signal: controller.signal,
           onRequest:()=>{void serial(async()=>{const s=tables.summaries.get(job.id);if(current()&&s)await save({summaries:[{...s,requestAttempts:(s.requestAttempts||0)+1}]});});},
           onUsage:usage=>{const safe=Object.fromEntries(['prompt_tokens','completion_tokens','total_tokens'].filter(k=>Number.isFinite(usage[k])&&usage[k]>=0).map(k=>[k,usage[k]]));void patchSummary(job.id,{usage:safe},current);},
           onPhase: patch => { void patchSummary(job.id, patch, current); },
           onDelta: chunk => { if (chunk) emitted = true; text += chunk; if (now() - lastWrite > 250) { lastWrite = now(); void patchSummary(job.id, { text }, current); } }
-        }) });
+        });} });
       const latest = await config(); assert(valid(tables.summaries.get(job.id), latest), 'SITE_DISABLED', '来源已删除或被停用，结果不会写回。');
       const missing = (summary.visitIds || []).filter(id => { const v=tables.visits.get(id); return !v?.summaryId || tables.summaries.get(v.summaryId)?.phase!=='complete'; }).length;
       await patchSummary(job.id, { phase: 'complete', text, error: '', missing, completedAt: now() }, current);
@@ -181,19 +191,20 @@ export function createKnowledgeManager({ chromeApi, settings, repository, permis
     pumping = true;
     try {
       while (!healthError&&!tables.meta.get('queue')?.held) {
-        for(const waiting of rows('jobs').filter(j=>j.status==='awaiting-input')){
+        const policy=await config();
+        for(const waiting of rows('jobs').filter(j=>j.status==='awaiting-input'&&runnable(tables.summaries.get(j.id),policy))){
           const summary=tables.summaries.get(waiting.id);if(!summary)continue;
           const visits=(summary.visitIds||[]).map(id=>tables.visits.get(id)).filter(Boolean);
           if(visits.some(v=>['pending','running','waiting'].includes(tables.jobs.get(v.summaryId)?.status)))continue;
           const value=await config(),p=prefs(value),allowed=visits.filter(v=>permitted(v.source,value));
           const sourceIds=[...new Set(allowed.map(v=>v.summaryId))].filter(id=>tables.summaries.get(id)?.phase==='complete'&&valid(tables.summaries.get(id),value));
           let inputIds=sourceIds;
-          if(['week','month','year'].includes(summary.kind)&&sourceIds.length){const lower=summary.kind==='year'?'month':'day',dates=[...new Set(allowed.map(v=>lower==='month'?dayKey(v.visitedAt,summary.range.timeZone).slice(0,7)+'-01':dayKey(v.visitedAt,summary.range.timeZone)))];inputIds=[];for(const date of dates){const child=await createReview({kind:lower,date,filter:summary.filter});inputIds.push(child.id);}}
+          if(['week','month','year'].includes(summary.kind)&&sourceIds.length){const lower=summary.kind==='year'?'month':'day',dates=[...new Set(allowed.map(v=>lower==='month'?dayKey(v.visitedAt,summary.range.timeZone).slice(0,7)+'-01':dayKey(v.visitedAt,summary.range.timeZone)))];inputIds=[];for(const date of dates){const child=await createReview({kind:lower,date,filter:summary.filter,automatic:automatic(summary)});inputIds.push(child.id);}}
           const signatureValue=await digest(JSON.stringify([summary.kind,summary.range.key,summary.semanticFilter,summary.dimension,sourceIds.map(id=>[id,tables.summaries.get(id)?.updatedAt]),allowed.map(v=>[v.id,v.note,v.project,v.tags]),p.prompts,value.summaryProfile]));
           const missing=allowed.filter(v=>!v.summaryId||tables.summaries.get(v.summaryId)?.phase!=='complete').length;
           await serial(async()=>{if(!tables.summaries.has(summary.id))return;await save({summaries:[{...summary,sourceIds,inputIds,annotations:allowed.map(v=>({id:v.id,source_id:v.summaryId,note:v.note,project:v.project,tags:v.tags})),signature:signatureValue,missing,phase:sourceIds.length?'queued':'complete',text:sourceIds.length?'':`本期暂无已完成的页面摘要${missing?`，${missing} 条资料仍需处理`:''}。`,updatedAt:now()}],jobs:[{...waiting,status:sourceIds.length?'pending':'complete'}]});});publish();
         }
-        const job = rows('jobs').filter(j => j.status === 'pending' && (tables.summaries.get(j.id)?.inputIds || []).every(id => tables.summaries.get(id)?.phase === 'complete')).sort((a,b) => a.priority-b.priority || a.createdAt-b.createdAt)[0];
+        const job = rows('jobs').filter(j => j.status === 'pending' && runnable(tables.summaries.get(j.id),policy) && (tables.summaries.get(j.id)?.inputIds || []).every(id => tables.summaries.get(id)?.phase === 'complete')).sort((a,b) => a.priority-b.priority || a.createdAt-b.createdAt)[0];
         if (!job) {
           const blocked=rows('jobs').filter(j=>j.status==='pending'&&(tables.summaries.get(j.id)?.inputIds||[]).some(id=>['error','stopped','interrupted','waiting'].includes(tables.summaries.get(id)?.phase)));
           if(blocked.length)await serial(async()=>save({jobs:blocked.map(j=>({...j,status:'dependency'})),summaries:blocked.map(j=>({...tables.summaries.get(j.id),phase:'waiting',error:'下层资料尚未完成，请处理相关记录后重新生成此回顾。'}))}));
@@ -211,6 +222,38 @@ export function createKnowledgeManager({ chromeApi, settings, repository, permis
     await serial(async () => { await save({ meta: [{ id: 'queue', held: false, error: '' }], jobs: rows('jobs').filter(j => j.status === 'waiting').map(j => ({ ...j, status: 'pending' })) }); }); void pump();
     healthError='';void pump();
   }
+  // Explicit requests remain runnable independently of the automatic policy,
+  // including their already-captured evidence and lower-level review jobs.
+  async function promoteManual(ids) {
+    await serial(async()=>{
+      const pending=[...ids],seen=new Set(),summaries=[],jobs=[];
+      while(pending.length){const id=pending.pop();if(seen.has(id))continue;seen.add(id);
+        const s=tables.summaries.get(id),job=tables.jobs.get(id);if(!s)continue;
+        pending.push(...(s.inputIds||[]));
+        summaries.push({...s,automatic:false,...(job?.status==='paused-auto'?{phase:'queued',error:''}:{})});
+        if(job?.status==='paused-auto')jobs.push({...job,status:job.pausedStatus||'pending'});
+      }
+      await save({summaries,jobs,meta:[{id:'queue',held:false,error:''}]});
+    });
+    healthError='';
+  }
+  async function scheduleNext() {
+    const p=prefs(await config());
+    if(p.autoSummary)await chromeApi.alarms.create('dianyi-knowledge-daily',{when:nextDaily(now(),p)});
+    else await chromeApi.alarms.clear('dianyi-knowledge-daily');
+  }
+  async function setAutomatic(enabled) {
+    const changed=automaticEnabled!==enabled;automaticEnabled=enabled;
+    if(enabled&&changed&&started)await serial(()=>save({meta:[{id:'queue',held:false,error:''}]}));
+    if(!enabled){
+      for(const [id,token]of running)if(automatic(tables.summaries.get(id))){running.delete(id);token.controller.abort();}
+      await serial(async()=>{
+        const paused=rows('jobs').filter(j=>automatic(tables.summaries.get(j.id))&&['pending','running','waiting','awaiting-input','dependency'].includes(j.status));
+        await save({jobs:paused.map(j=>({...j,status:'paused-auto',pausedStatus:j.status==='awaiting-input'?'awaiting-input':'pending'})),summaries:paused.map(j=>({...tables.summaries.get(j.id),phase:'waiting',error:'自动总结已关闭，内容已保留；可手动总结。',updatedAt:now()}))});
+      });
+    }
+    await scheduleNext();publish();void pump();
+  }
   async function select(filter = {}) {
     await loaded; const value = await config(), cleaned = cleanKnowledgeFilter(filter);
     return rows('visits').filter(v => permitted(v.source, value) && matchesVisit(v,{...cleaned,query:''})&&(!cleaned.query||matchesVisit(v,{query:cleaned.query})||`${tables.summaries.get(v.summaryId)?.topic||''} ${tables.summaries.get(v.summaryId)?.text||''}`.toLocaleLowerCase().includes(cleaned.query.toLocaleLowerCase()))).sort((a,b) => b.visitedAt-a.visitedAt);
@@ -226,7 +269,8 @@ export function createKnowledgeManager({ chromeApi, settings, repository, permis
     const logicalKey = kind === 'analysis' ? `analysis:${signatureValue}` : range.key;
     const existing = rows('summaries').filter(s => s.logicalKey === logicalKey && s.signature === signatureValue && s.kind === kind).sort((a,b)=>(b.revision||0)-(a.revision||0)||b.createdAt-a.createdAt)[0];
     const retryFailed=input.retryFailed&&existing&&['error','stopped','interrupted','waiting'].includes(existing.phase);
-    if (existing && !input.force&&!retryFailed) return { id: existing.id, reused: true };
+    if (existing && !input.force&&!retryFailed) {if(!input.automatic)await promoteManual([existing.id,...visits.map(v=>v.summaryId).filter(Boolean)]);void pump();return { id: existing.id, reused: true };}
+    if(!input.automatic)await promoteManual(visits.map(v=>v.summaryId).filter(Boolean));
     const missing = visits.filter(v => !v.summaryId || tables.summaries.get(v.summaryId)?.phase !== 'complete').length;
     const awaiting=visits.some(v=>['pending','running','waiting'].includes(tables.jobs.get(v.summaryId)?.status));
     let inputIds = sourceIds;
@@ -234,10 +278,10 @@ export function createKnowledgeManager({ chromeApi, settings, repository, permis
       const lower = kind === 'year' ? 'month' : 'day';
       const dates = [...new Set(visits.map(v => lower === 'month' ? dayKey(v.visitedAt, p.timeZone).slice(0,7)+'-01' : dayKey(v.visitedAt, p.timeZone)))];
       inputIds = [];
-      for (const date of dates) { const child = await createReview({ kind: lower, date,retryFailed:input.force||input.retryFailed, filter:{...input.filter,from:Math.max(input.filter?.from??range.from,range.from),to:Math.min(input.filter?.to??range.to,range.to)} }); inputIds.push(child.id); }
+      for (const date of dates) { const child = await createReview({ kind: lower, date,automatic:!!input.automatic,retryFailed:input.force||input.retryFailed, filter:{...input.filter,from:Math.max(input.filter?.from??range.from,range.from),to:Math.min(input.filter?.to??range.to,range.to)} }); inputIds.push(child.id); }
     }
     const title = `${range.label} · ${KNOWLEDGE_KINDS[kind]}`, id = crypto.randomUUID();
-    const summary = { id, kind, logicalKey, signature: signatureValue,semanticFilter,title, range: { ...range, to: filter.to, from: filter.from }, sourceIds, inputIds, missing, annotations:visits.map(v=>({id:v.id,source_id:v.summaryId,note:v.note,project:v.project,tags:v.tags})),visitIds:visits.map(v=>v.id),visitCount: visits.length, dimension: String(input.dimension || '主题').slice(0, 80), filter, phase: sourceIds.length||awaiting ? 'queued' : 'complete', text: sourceIds.length||awaiting ? '' : missing ? `本期有 ${missing} 条资料尚未完成总结，可在处理完成后更新。` : '本期暂无符合条件的阅读资料。', error: '', createdAt: now(), updatedAt: now(), preset: 'general' };
+    const summary = { id, kind,automatic:!!input.automatic, logicalKey, signature: signatureValue,semanticFilter,title, range: { ...range, to: filter.to, from: filter.from }, sourceIds, inputIds, missing, annotations:visits.map(v=>({id:v.id,source_id:v.summaryId,note:v.note,project:v.project,tags:v.tags})),visitIds:visits.map(v=>v.id),visitCount: visits.length, dimension: String(input.dimension || '主题').slice(0, 80), filter, phase: sourceIds.length||awaiting ? 'queued' : 'complete', text: sourceIds.length||awaiting ? '' : missing ? `本期有 ${missing} 条资料尚未完成总结，可在处理完成后更新。` : '本期暂无符合条件的阅读资料。', error: '', createdAt: now(), updatedAt: now(), preset: 'general' };
     let resultId=id;
     await serial(async () => {const duplicate=!input.force&&rows('summaries').filter(s=>s.kind===kind&&s.logicalKey===logicalKey&&s.signature===signatureValue&&!(input.retryFailed&&['error','stopped','interrupted','waiting'].includes(s.phase))).sort((a,b)=>b.createdAt-a.createdAt)[0];if(duplicate){resultId=duplicate.id;return;}summary.revision=rows('summaries').filter(s=>s.logicalKey===logicalKey&&s.kind===kind).length+1;await save({ summaries: [summary], ...(sourceIds.length||awaiting ? { jobs: [{ id, status: awaiting?'awaiting-input':'pending', priority: 3, createdAt: now() }] } : {}) });}); publish(); void pump(); return { id:resultId };
   }
@@ -245,19 +289,20 @@ export function createKnowledgeManager({ chromeApi, settings, repository, permis
     await loaded; if (scheduling) return; scheduling = true;
     try {
       const value = await config(), p = prefs(value), today = dayKey(now(), p.timeZone);
-      await chromeApi.alarms.create('dianyi-knowledge-daily', { when: nextDaily(now(), p) });
+      await scheduleNext();if(!p.autoSummary)return;
       const dates = [...new Set((await select()).map(v => dayKey(v.visitedAt, p.timeZone)))].sort();
       const periods = new Map();
       for (const date of dates) {
         if (date === today && now() < zonedTime(today, p.time, p.timeZone)) continue;
         if(catchup&&date===today&&rows('summaries').some(s=>s.kind==='day'&&s.logicalKey===`day:${date}`))continue;
-        await createReview({ kind: 'day', date });
+        if(!prefs(await config()).autoSummary)return;
+        await createReview({ kind: 'day', date,automatic:true });
         for (const kind of ['week','month','year']) {
           const r = period(kind, date, p.timeZone);
           if (r.to <= now() || shiftDay(r.end,-1) === today && now() >= zonedTime(today,p.time,p.timeZone)) periods.set(r.key, { kind, date });
         }
       }
-      for (const spec of [...periods.values()].sort((a,b) => ['week','month','year'].indexOf(a.kind)-['week','month','year'].indexOf(b.kind))) {const r=period(spec.kind,spec.date,p.timeZone);if(catchup&&shiftDay(r.end,-1)===today&&rows('summaries').some(s=>s.logicalKey===r.key))continue;await createReview(spec);}
+      for (const spec of [...periods.values()].sort((a,b) => ['week','month','year'].indexOf(a.kind)-['week','month','year'].indexOf(b.kind))) {if(!prefs(await config()).autoSummary)return;const r=period(spec.kind,spec.date,p.timeZone);if(catchup&&shiftDay(r.end,-1)===today&&rows('summaries').some(s=>s.logicalKey===r.key))continue;await createReview({...spec,automatic:true});}
     } finally { scheduling = false; }
   }
   async function restrict() {
@@ -330,18 +375,19 @@ export function createKnowledgeManager({ chromeApi, settings, repository, permis
     if(!s&&visit?.documentId){const doc=tables.documents.get(visit.documentId);assert(doc,'NOT_FOUND','原文记录已不存在。');s={kind:'page',logicalKey:`page:${doc.id}`,documentId:doc.id,source:doc.source,chars:doc.chars,truncated:doc.truncated,preset:value.summaryPrefs.preset,contextIds:[]};}
     assert(s,'NOT_FOUND','记录已不存在。');assert(permitted(s.source,value),'SITE_DISABLED','来源已被停用。');
     if(s.id&&s.phase!=='complete')stop(s.id);const newId=crypto.randomUUID(),contextIds=(s.contextIds||[]).filter(id=>valid(tables.summaries.get(id),value));
-    await serial(async()=>save({summaries:[{...s,id:newId,revision:rows('summaries').filter(row=>row.logicalKey===s.logicalKey).length+1,contextIds,force:true,phase:'queued',invalidated:false,text:'',error:'',createdAt:now(),updatedAt:now()}],jobs:[{id:newId,status:'pending',priority:0,createdAt:now()}],visits:rows('visits').filter(v=>visit?v.id===visit.id:v.summaryId===id).map(v=>({...v,summaryId:newId,error:''})),meta:[{id:'queue',held:false,error:''}]}));healthError='';void pump();return{id:newId};
+    await serial(async()=>save({summaries:[{...s,id:newId,automatic:false,revision:rows('summaries').filter(row=>row.logicalKey===s.logicalKey).length+1,contextIds,force:true,phase:'queued',invalidated:false,text:'',error:'',createdAt:now(),updatedAt:now()}],jobs:[{id:newId,status:'pending',priority:0,createdAt:now()}],visits:rows('visits').filter(v=>visit?v.id===visit.id:v.summaryId===id).map(v=>({...v,summaryId:newId,error:''})),meta:[{id:'queue',held:false,error:''}]}));healthError='';void pump();return{id:newId};
   }
   async function initialize() {
     await loaded;
     await serial(async()=> { const interrupted=rows('jobs').filter(j=>j.status==='running');await save({ jobs:interrupted.map(j=>({...j,status:tables.summaries.get(j.id)?.phase==='complete'?'complete':'error'})),summaries:interrupted.filter(j=>tables.summaries.get(j.id)?.phase!=='complete').map(j=>({...tables.summaries.get(j.id),phase:'interrupted',error:'后台中断，内容已保留；可在轨迹中重试。'})) }); });
+    automaticEnabled=prefs(await config()).autoSummary;await setAutomatic(automaticEnabled);
     started=true;await chromeApi.alarms.create('dianyi-knowledge-queue',{periodInMinutes:1});await runDue({catchup:true});void pump();
   }
-  return { initialize, begin, captureTab, restrict, resume, runDue, pump, createReview,list, detail, updateVisit, remove,clear, exportData, retry, stop,
-    start: (tabId,preset)=>captureTab(tabId,{preset,force:true,documentReady:true}), ensure:(tabId,preset)=>captureTab(tabId,{preset,documentReady:true}),
+  return { initialize, begin, captureTab, restrict, resume, runDue, pump, createReview,list, detail, updateVisit, remove,clear, exportData, retry, stop,setAutomatic,
+    start: (tabId,preset)=>captureTab(tabId,{preset,force:true,manual:true,documentReady:true}), ensure:(tabId,preset,options={})=>captureTab(tabId,{preset,manual:!!options.manual,documentReady:true}),
     snapshot: async tabId=>{await loaded;return stateFor(tabId);},
     connect(port,tabId) { port.summaryTab=tabId;ports.add(port);port.onMessage.addListener(message=>{if(message?.type==='bind'&&message.tabId===tabId)loaded.then(publish);});port.onDisconnect.addListener(()=>ports.delete(port)); },
     cancelAll(reason) { for(const id of running.keys())stop(id,reason); }, invalidate:()=>{}, removeTab:tabId=>bindings.delete(tabId),
-    scheduleNext:async()=>{const p=prefs(await config());await chromeApi.alarms.create('dianyi-knowledge-daily',{when:nextDaily(now(),p)});}
+    scheduleNext
   };
 }

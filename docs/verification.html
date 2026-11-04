@@ -1,7 +1,16 @@
-<!doctype html><html lang="zh-CN"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>点译 v0.14.0 · 验收记录</title><style>*{box-sizing:border-box}html{scroll-behavior:smooth;scroll-padding-top:90px}body{margin:0;background:#f5f5f0;color:#263735;font:14px/1.95 -apple-system,BlinkMacSystemFont,"Segoe UI","PingFang SC",sans-serif}a{color:#006665;text-decoration:none}a:hover{text-decoration:underline}header{padding:18px 30px;position:sticky;top:0;background:#fbfcf8ef;border-bottom:1px solid #dfe5df;backdrop-filter:blur(10px);display:flex;align-items:center;justify-content:space-between;gap:18px;z-index:5}.brand{font-size:23px;font-weight:650;letter-spacing:2px}header small{font-size:11px;color:#61716c;letter-spacing:.7px}.layout{max-width:1400px;display:grid;grid-template-columns:218px minmax(0,1fr);gap:30px;margin:auto;padding:35px 30px 60px}nav{position:sticky;top:105px;height:calc(100vh - 130px);overflow:auto;padding-right:12px}nav small{display:block;font-size:10px;letter-spacing:1.6px;color:#61716c;margin:0 10px 15px}nav a{display:block;padding:8px 10px;margin:3px 0;border-radius:7px;color:#61716c;font-size:12px}nav a:hover{background:#eaf3ee;text-decoration:none;color:#006665}main{min-width:0;border:1px solid #dfe5df;border-radius:13px;background:#fff;padding:37px 43px 45px}.eyebrow{font-size:10px;color:#006665;letter-spacing:2px;margin-bottom:12px;font-weight:600}h1{font-size:30px;font-weight:600;line-height:1.4;margin:0 0 15px;letter-spacing:-.6px}h2{font-size:21px;font-weight:550;margin:37px 0 15px;line-height:1.5}h3{font-size:16px;font-weight:550;margin:25px 0 12px}p{margin:11px 0 17px}blockquote{margin:24px 0;background:#edf4ec;border-left:3px solid #006665;padding:16px 20px;border-radius:0 8px 8px 0;color:#406247;font-size:13px}blockquote p{margin:0}.table-scroll{overflow-x:auto;border:1px solid #dfe5df;border-radius:9px;margin:17px 0 23px}table{width:100%;border-collapse:collapse;font-size:12px;line-height:1.9}th{text-align:left;background:#f2f7ed;color:#4e704d;font-weight:500;padding:12px 14px;border-bottom:1px solid #dfe5df}td{padding:13px 14px;border-bottom:1px solid #e5ebe0;vertical-align:top;min-width:100px}tr:last-child td{border-bottom:0}td:first-child{min-width:130px}tr:nth-child(even) td{background:#fcfdf8}ul,ol{padding-left:23px}li{margin:8px 0}code{background:#eef3e8;border-radius:4px;padding:2px 5px;font-size:12px;overflow-wrap:anywhere}pre{padding:17px 19px;border-radius:8px;background:#eef3e8;overflow:auto;font-size:12px}pre code{padding:0}strong{font-weight:600}.doc-footer{font-size:11px;line-height:1.9;color:#61716c;border-top:1px solid #dfe5df;padding-top:22px;margin-top:35px}.source-label{font-size:10px;color:#61716c;letter-spacing:.5px}.download{font-size:12px;padding:9px 14px;border:1px solid #006665;color:#006665;border-radius:8px;white-space:nowrap;display:inline-block}@media(max-width:900px){.layout{grid-template-columns:175px minmax(0,1fr);gap:20px;padding:25px 20px}main{padding:28px 27px}header small{display:none}}@media(max-width:650px){header{padding:14px 19px}.brand{font-size:20px}.layout{display:block;padding:20px 13px}nav{height:auto;position:static;display:flex;flex-wrap:wrap;gap:5px;padding:0;margin-bottom:18px}nav small{width:100%;margin:0 6px 5px}nav a{font-size:10px;padding:5px 8px;border:1px solid #dfe5df;margin:0}main{padding:25px 20px}h1{font-size:24px}h2{font-size:20px}.table-scroll{margin-left:-6px;margin-right:-6px}table{font-size:11px}td,th{padding:10px;min-width:120px}.download{font-size:10px}}@media(prefers-reduced-motion:reduce){html{scroll-behavior:auto}}@media print{header,nav{display:none}.layout{display:block;padding:0}body{background:white}main{border:0;padding:0}h2{break-after:avoid}tr{break-inside:avoid}}</style></head><body><header><div><span class="brand">点译</span> <small>点一下，读懂。 / v0.14.0</small></div><span class="source-label">CHROME / EDGE</span></header><div class="layout"><nav aria-label="文档目录"><small>CONTENTS / 目录</small><a href="#section-1">统一本地模型库、自动检索与词库保护（v0.14.0）</a><a href="#section-2">阅读轨迹与周期回顾（v0.13.0）</a><a href="#section-3">按标签页自动总结（v0.12.1）</a><a href="#section-4">多连接与本机 Codex（v0.12.0）</a><a href="#section-5">产品介绍与宣传素材（v0.11.0）</a><a href="#section-6">网页总结（v0.10.0）</a><a href="#section-7">本版翻译回归与单元检查</a><a href="#section-8">翻译基线（v0.9.1）</a><a href="#section-9">模型访问错误（v0.9.1）</a><a href="#section-10">通用文本标签映射（v0.9.0）</a><a href="#section-11">小胶囊与目标语言专项（v0.8.0）</a><a href="#section-12">重复词增量对齐专项（v0.7.1）</a><a href="#section-13">千问 MT 与中文去重专项（v0.7.0）</a><a href="#section-14">小猫、排版、页面暂存与升级专项</a><a href="#section-15">界面留白专项（v0.6.1）</a><a href="#section-16">重复词闪烁专项（v0.5.1）</a><a href="#section-17">批次配置、映射与调色板专项（v0.5.0）</a><a href="#section-18">批量与视口专项（v0.4.0 历史对照）</a><a href="#section-19">释义卡片专项</a><a href="#section-20">默认开启与右键专项</a><a href="#section-21">保留能力</a><a href="#section-22">按块阅读专项</a><a href="#section-23">本机性能</a><a href="#section-24">验证边界</a><a href="#section-25">复现命令</a></nav><main><div class="eyebrow">VERIFICATION / 验收记录</div><h1>点译 v0.14.0 · 验收记录</h1>
+<!doctype html><html lang="zh-CN"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>点译 v0.14.1 · 验收记录</title><style>*{box-sizing:border-box}html{scroll-behavior:smooth;scroll-padding-top:90px}body{margin:0;background:#f5f5f0;color:#263735;font:14px/1.95 -apple-system,BlinkMacSystemFont,"Segoe UI","PingFang SC",sans-serif}a{color:#006665;text-decoration:none}a:hover{text-decoration:underline}header{padding:18px 30px;position:sticky;top:0;background:#fbfcf8ef;border-bottom:1px solid #dfe5df;backdrop-filter:blur(10px);display:flex;align-items:center;justify-content:space-between;gap:18px;z-index:5}.brand{font-size:23px;font-weight:650;letter-spacing:2px}header small{font-size:11px;color:#61716c;letter-spacing:.7px}.layout{max-width:1400px;display:grid;grid-template-columns:218px minmax(0,1fr);gap:30px;margin:auto;padding:35px 30px 60px}nav{position:sticky;top:105px;height:calc(100vh - 130px);overflow:auto;padding-right:12px}nav small{display:block;font-size:10px;letter-spacing:1.6px;color:#61716c;margin:0 10px 15px}nav a{display:block;padding:8px 10px;margin:3px 0;border-radius:7px;color:#61716c;font-size:12px}nav a:hover{background:#eaf3ee;text-decoration:none;color:#006665}main{min-width:0;border:1px solid #dfe5df;border-radius:13px;background:#fff;padding:37px 43px 45px}.eyebrow{font-size:10px;color:#006665;letter-spacing:2px;margin-bottom:12px;font-weight:600}h1{font-size:30px;font-weight:600;line-height:1.4;margin:0 0 15px;letter-spacing:-.6px}h2{font-size:21px;font-weight:550;margin:37px 0 15px;line-height:1.5}h3{font-size:16px;font-weight:550;margin:25px 0 12px}p{margin:11px 0 17px}blockquote{margin:24px 0;background:#edf4ec;border-left:3px solid #006665;padding:16px 20px;border-radius:0 8px 8px 0;color:#406247;font-size:13px}blockquote p{margin:0}.table-scroll{overflow-x:auto;border:1px solid #dfe5df;border-radius:9px;margin:17px 0 23px}table{width:100%;border-collapse:collapse;font-size:12px;line-height:1.9}th{text-align:left;background:#f2f7ed;color:#4e704d;font-weight:500;padding:12px 14px;border-bottom:1px solid #dfe5df}td{padding:13px 14px;border-bottom:1px solid #e5ebe0;vertical-align:top;min-width:100px}tr:last-child td{border-bottom:0}td:first-child{min-width:130px}tr:nth-child(even) td{background:#fcfdf8}ul,ol{padding-left:23px}li{margin:8px 0}code{background:#eef3e8;border-radius:4px;padding:2px 5px;font-size:12px;overflow-wrap:anywhere}pre{padding:17px 19px;border-radius:8px;background:#eef3e8;overflow:auto;font-size:12px}pre code{padding:0}strong{font-weight:600}.doc-footer{font-size:11px;line-height:1.9;color:#61716c;border-top:1px solid #dfe5df;padding-top:22px;margin-top:35px}.source-label{font-size:10px;color:#61716c;letter-spacing:.5px}.download{font-size:12px;padding:9px 14px;border:1px solid #006665;color:#006665;border-radius:8px;white-space:nowrap;display:inline-block}@media(max-width:900px){.layout{grid-template-columns:175px minmax(0,1fr);gap:20px;padding:25px 20px}main{padding:28px 27px}header small{display:none}}@media(max-width:650px){header{padding:14px 19px}.brand{font-size:20px}.layout{display:block;padding:20px 13px}nav{height:auto;position:static;display:flex;flex-wrap:wrap;gap:5px;padding:0;margin-bottom:18px}nav small{width:100%;margin:0 6px 5px}nav a{font-size:10px;padding:5px 8px;border:1px solid #dfe5df;margin:0}main{padding:25px 20px}h1{font-size:24px}h2{font-size:20px}.table-scroll{margin-left:-6px;margin-right:-6px}table{font-size:11px}td,th{padding:10px;min-width:120px}.download{font-size:10px}}@media(prefers-reduced-motion:reduce){html{scroll-behavior:auto}}@media print{header,nav{display:none}.layout{display:block;padding:0}body{background:white}main{border:0;padding:0}h2{break-after:avoid}tr{break-inside:avoid}}</style></head><body><header><div><span class="brand">点译</span> <small>点一下，读懂。 / v0.14.1</small></div><span class="source-label">CHROME / EDGE</span></header><div class="layout"><nav aria-label="文档目录"><small>CONTENTS / 目录</small><a href="#section-1">自动总结默认关闭，手动总结独立（v0.14.1）</a><a href="#section-2">统一本地模型库、自动检索与词库保护（v0.14.0）</a><a href="#section-3">阅读轨迹与周期回顾（v0.13.0）</a><a href="#section-4">按标签页自动总结（v0.12.1）</a><a href="#section-5">多连接与本机 Codex（v0.12.0）</a><a href="#section-6">产品介绍与宣传素材（v0.11.0）</a><a href="#section-7">网页总结（v0.10.0）</a><a href="#section-8">本版翻译回归与单元检查</a><a href="#section-9">翻译基线（v0.9.1）</a><a href="#section-10">模型访问错误（v0.9.1）</a><a href="#section-11">通用文本标签映射（v0.9.0）</a><a href="#section-12">小胶囊与目标语言专项（v0.8.0）</a><a href="#section-13">重复词增量对齐专项（v0.7.1）</a><a href="#section-14">千问 MT 与中文去重专项（v0.7.0）</a><a href="#section-15">小猫、排版、页面暂存与升级专项</a><a href="#section-16">界面留白专项（v0.6.1）</a><a href="#section-17">重复词闪烁专项（v0.5.1）</a><a href="#section-18">批次配置、映射与调色板专项（v0.5.0）</a><a href="#section-19">批量与视口专项（v0.4.0 历史对照）</a><a href="#section-20">释义卡片专项</a><a href="#section-21">默认开启与右键专项</a><a href="#section-22">保留能力</a><a href="#section-23">按块阅读专项</a><a href="#section-24">本机性能</a><a href="#section-25">验证边界</a><a href="#section-26">复现命令</a></nav><main><div class="eyebrow">VERIFICATION / 验收记录</div><h1>点译 v0.14.1 · 验收记录</h1>
 <p>2026-11-04</p>
-<h2 id="section-1">统一本地模型库、自动检索与词库保护（v0.14.0）</h2>
-<p>2026-11-04。本节为当前交付，旧版本证据保留原版本；v0.14.0 的共用连接规则替代旧版按用途保存两套 Key 的规则。</p>
+<h2 id="section-1">自动总结默认关闭，手动总结独立（v0.14.1）</h2>
+<p>本节为当前交付；旧版本的默认后台自动总结行为由本节替代。开关位于插件弹窗顶部及总结设置页，配置保存到本地；旧配置缺少此项时同样按关闭处理。关闭会取消在途自动任务、暂停旧自动队列、取消每日自动计划，并保留已有内容；主动总结、重新总结与生成回顾不受影响。</p>
+<ul>
+<li><strong>174 项 Node 检查</strong>：新增默认关闭、升级默认、无正文采集／模型请求、显式手动绕过、停止自动流而保留手动流、旧队列跨重启暂停、手动年回顾依赖、重新开启不批量处理旧暂停历史、旧周期任务自动属性继承，以及手动侧栏打开不受焦点竞争丢弃。回执 <code>verification/unit-0.14.1.json</code>。</li>
+<li><strong>7 项开关专项浏览器流程</strong>：最终 ZIP、临时 Chrome 资料和真实本地 HTTP/SSE；配置模型后仍关闭、浏览／刷新零自动请求、侧栏恢复不请求而手动按钮可用、弹窗一键开启、关闭中断自动流及暂停排队、修改计划／继续任务／旧闹钟不绕过关闭、完整重启保持关闭及手动总结可用。回执 <code>verification/automatic-summary-0.14.1.json</code>，实际弹窗截图在 <code>verification/automatic-summary-ui/</code>。</li>
+<li><strong>13 项原生侧栏、15 项知识流程、14 项模型库与真实升级回归</strong>：新增关闭自动总结后，从生产弹窗打开真实原生侧栏并生成，以及侧栏可见时跳转不自动请求、点击手动总结可用。原知识、制品、复制／下载、备注保护、日周月年、闹钟、黑名单和词库保护继续验证。升级专项确认旧版升级默认关闭后，明确开启再验证自动流程。回执 <code>knowledge-native-0.14.1.json</code>、<code>knowledge-0.14.1.json</code>、<code>shared-models-0.14.1.json</code>，均在 <code>verification/</code>。</li>
+<li><strong>42 个生产脚本检查</strong>，源码与 ZIP 字节核对、文档本地链接、无凭据或 Word、历史 ZIP 不变和已有解压安装目录同步由 <code>scripts/verify-knowledge-release.py</code> 检查，回执 <code>verification/knowledge-release-0.14.1.json</code>。未新增权限、调试参数或隐藏启动要求。</li>
+</ul>
+<p>回归中发现弹窗的焦点切换可能丢弃手动总结，已改为按显式选择的标签页重新核对权限并发起；仅可见性和导航触发仍遵守自动开关。备注保存的完成提示调整到界面刷新完成后，避免用户开始下一次输入时旧回写覆盖字段。浏览器测试使用本地合成资料，不消耗付费厂家额度、不读取用户资料；原生 Edge 和物理拖拽仍未单独验证。</p>
+<h2 id="section-2">统一本地模型库、自动检索与词库保护（v0.14.0）</h2>
+<p>2026-11-04。本节保留 v0.14.0 历史证据；其共用连接规则替代旧版按用途保存两套 Key 的规则，自动总结默认行为以 v0.14.1 为准。</p>
 <ul>
 <li><strong>164 项 Node 检查通过</strong>：原检查继续覆盖翻译、总结和知识队列；新增跨场景连接与 Key 复用、场景选择独立、共享编辑／删除、同 ID 旧连接迁移、MT 能力边界和清 Key 不复活；词库专项覆盖 v1 升级保留、合并恢复、整批校验、凭据字段过滤、自动副本恢复、删除不复活、备份失败与损坏副本保护。回执 <code>verification/unit-0.14.0.json</code>。</li>
 <li><strong>14 项实际升级与新交互流程</strong>：从不可变的 v0.13.0 ZIP 初始化合成旧词库及两套 Key，原目录覆盖新版，在真实 <code>chrome://extensions</code> 页面点击重新加载。核对扩展 ID、原词条 ID／释义、默认／备用与 Key 保留；场景选择无测试请求、共享编辑、不同场景默认、MT 禁用、全局删除提示、1440／375px 布局、实际网页总结与原生鼠标划词使用同一 Key、自动副本更新、350ms 输入与中文组词等待、条件选择、回顾自动检索、生成时消费未触发的检索条件、真实 JSON 下载与文件恢复，以及完整浏览器重启。回执 <code>verification/shared-models-0.14.0.json</code>。</li>
@@ -11,7 +20,7 @@
 </ul>
 <p>新界面截图在 <code>verification/shared-models-ui/</code>：<code>model-library-desktop.png</code>、<code>summary-desktop.png</code>、<code>summary-mobile.png</code>、<code>trails-desktop.png</code>、<code>vocabulary-protection.png</code>；资料与 Key 为明确的本地合成验收数据，不是用户资料或商业效果证明。机械界面检测无新增问题，人工检查保留既有管理界面世界。</p>
 <p>真实升级要求原路径覆盖并在扩展管理页重新加载；仅关闭再打开浏览器可能仍使用旧后台模块，版本不匹配会提供扩展管理入口。词库自动副本与主库均在扩展本地存储内，卸载或换目录前仍需导出 JSON。测试不使用付费厂家、本机 Codex 登录或真实浏览记录；Edge 原生安装尚未单独验证。使用方法见<a href="model-library-guide.html">模型库与升级保护</a>。</p>
-<h2 id="section-2">阅读轨迹与周期回顾（v0.13.0）</h2>
+<h2 id="section-3">阅读轨迹与周期回顾（v0.13.0）</h2>
 <p>2026-11-04 · 本节记录当前交付；以下旧版本章节保留为历史证据，侧栏可见性准入与最近 8 页会话规则已由当前后台知识执行器替代。</p>
 <ul>
 <li><strong>151 项 Node 检查通过</strong>，其中 25 项知识专项覆盖自然日／DST、跨周月年、证据无损分批、不开侧栏采集、内容复用、关闭来源页、无模型等待、重启、黑名单及上下文权限、备注与版本、周期幂等、定时与晚到资料、分层归纳、筛选、删除级联、导出和等待已采集任务。测试使用隔离 IndexedDB 与真实本地 HTTP/SSE。记录 <code>verification/unit-0.13.0.json</code> 和对应 TAP。</li>
@@ -22,7 +31,7 @@
 <li>安装包完整性、源码字节一致、文档链接、无凭据／认证缓存／Word、历史 ZIP 不变及既有解压安装目录覆盖检查由 <code>scripts/verify-knowledge-release.py</code> 执行，记录 <code>verification/knowledge-release-0.13.0.json</code>。</li>
 </ul>
 <p>Chrome for Testing 151.0.7922.34 已实际安装。此轮未消耗付费厂家额度，不验证模型语义质量、真实账户权限或账单；未复跑全部旧翻译浏览器专项或未改动的本机 Codex 助手。原生 Edge 和物理侧栏拖动手势仍未确认。电脑关机或浏览器完全退出时不能准点生成，恢复运行按账本补办。功能、限制和数据生命周期见<a href="knowledge-guide.html">阅读知识指南</a>。</p>
-<h2 id="section-3">按标签页自动总结（v0.12.1）</h2>
+<h2 id="section-4">按标签页自动总结（v0.12.1）</h2>
 <ul>
 <li>126 项 Node 检查通过，其中 12 项专门覆盖侧栏路径绑定、初始化不调用模型、打开与绑定去重、同页复用、切页隔离、可见性、刷新／导航、黑名单定向取消、旧流覆盖防护、错误不循环请求，以及不依赖新版打开／关闭事件的兼容路径。请求生命周期使用真实本地 HTTP/SSE，未使用付费服务。记录 <code>verification/unit-0.12.1.json</code>。</li>
 <li>11 项原生侧栏场景在 Chrome for Testing 151.0.7922.34 通过。使用未修改 ZIP 和独立临时资料，操作生产弹窗页面并打开浏览器原生侧栏，直接通过原生打开 API 验证仅端口绑定也能自动总结。核对页面宽度、实际侧栏 DOM、两页独立结果、刷新和跳转恰好一轮请求、关闭后不新增任务、同页复用、黑名单只影响目标页，以及移出黑名单不强行打开。记录 <code>verification/summary-panel-0.12.1.json</code>，真实侧栏截图 <code>verification/summary-panel-0.12.1.png</code>。</li>
@@ -31,7 +40,7 @@
 <li>34 个生产脚本语法、本地模块、CSP、HTTP(S) 权限与无全局侧栏回退检查通过。当前默认权限、可选权限与 CSP 保持 v0.12.0；移除清单的全局侧栏路径，改为按标签页注册。</li>
 <li>本轮不读取现有浏览器存储、Codex 认证或真实 Key，不重新使用付费厂家测试。本机助手没有改动，旧版真实 Codex 和助手回执仍保留 v0.12.0；原生 Edge、物理拖动手势和全部旧翻译浏览器专项未在此轮重新验收。</li>
 </ul>
-<h2 id="section-4">多连接与本机 Codex（v0.12.0）</h2>
+<h2 id="section-5">多连接与本机 Codex（v0.12.0）</h2>
 <ul>
 <li>114 项单元检查通过，含同域名不同 Key 隔离、新连接不借用旧 Key、翻译与总结独立、会话/长期保存迁移、清除后不复活、并发保存、8 个连接上限、默认优先与备用顺序、取消与格式异常不切换、部分总结不重跑、全部连接失败的队列暂停标记。</li>
 <li>本机助手的 6 项隔离检查通过：UTF8 长度帧、输入边界、明确来源白名单、CLI 路径与安装目录、MCP 显式停用、只读内存会话、拒绝工具和取消后的进程清理。没有通过测试钩子放宽生产限制。</li>
@@ -41,7 +50,7 @@
 <li>可选 <code>nativeMessaging</code> 权限只在用户选择连接本机 Codex 时请求。已有 API 功能不要求此权限；没有新生产调试开关。安装器及本机助手随包提供，需要首次在本机独立安装；当前支持 macOS / Linux，未宣称原生 Edge 或 Windows 本机助手验收。</li>
 <li>本版没有将全部旧翻译/总结浏览器专项重新运行，历史回执保留原版本。此次新增机器记录见 <code>verification/connections-0.12.0.json</code>、<code>unit-0.12.0.json</code>、<code>native-host-0.12.0.json</code> 和 <code>connections-release-0.12.0.json</code>。源码语法、模块和严格 CSP 检查覆盖 33 个生产脚本。</li>
 </ul>
-<h2 id="section-5">产品介绍与宣传素材（v0.11.0）</h2>
+<h2 id="section-6">产品介绍与宣传素材（v0.11.0）</h2>
 <ul>
 <li>Chrome 的真实已安装插件在 MDN 公开网页完成一次短语翻译，得到「渐进增强」。打开另一篇 MDN 文章时，正文直接显示本地已存释义，没有第二次点击翻译。未读取既有 Key、模型配置、账单或账户页面。操作记录见 <code>docs/media/operations-2026-11-03.json</code>，三张最终截图见 <code>src/assets/promo/</code>。</li>
 <li>独立介绍页在真实 Chrome 验证了 320、375、768px 与桌面布局，无横向溢出；检查了导航锚点、手机菜单和 Escape 焦点返回、逐词显现、FAQ、隐私与使用说明、404 返回、安装入口。桌面和手机截图分别为 <code>verification/intro-desktop.png</code>、<code>intro-mobile.png</code>。</li>
@@ -50,7 +59,7 @@
 <li>v0.11.0 的 102 项单元检查与 30 个生产脚本静态检查通过。宣传页变更没有新增权限、生产调试参数、运行开关或收费系统。真实模型调用只用于上述公开短语；未测量或宣称节省金额。</li>
 <li>当前新增验收与打包记录见 <code>verification/intro-0.11.0.json</code> 和 <code>presentation-release-0.11.0.json</code>。下列 v0.10.0 与更早浏览器回归记录保留原版本，不计作 v0.11.0 的新回执。</li>
 </ul>
-<h2 id="section-6">网页总结（v0.10.0）</h2>
+<h2 id="section-7">网页总结（v0.10.0）</h2>
 <ul>
 <li><code>verification/summary-0.10.0.json</code> 的 19 项检查全部通过：使用未修改的解压 ZIP、隔离浏览器与真实本地 HTTP/SSE 服务，记录 16 次测试模型请求，页面错误为空。</li>
 <li>覆盖总结连接与翻译配置互不影响、提示词持久化、自动分类与流式总结 2 次请求、手动场景 1 次、仅译文模式仍提取原文、前 60,000 字符截取提示。</li>
@@ -62,10 +71,10 @@
 <li>本机没有原生 Edge 二进制，尚未实际安装 Edge；同一 MV3 目标包不等于已经通过 Edge 原生验收。本次总结验证没有真实付费厂家 Key，不能宣称真实账户可用性、额度或语义质量已测。</li>
 </ul>
 <p>正常总结输出上限为 8 万字符、任务最长 3 分钟，profile 超时表示无响应秒数；会话最多暂存最近 8 页。上述边界依据当前实现记录，未将每个上限都表述为独立长时实测。使用与实现说明见<a href="summary-guide.html">网页总结</a>。</p>
-<h2 id="section-7">本版翻译回归与单元检查</h2>
+<h2 id="section-8">本版翻译回归与单元检查</h2>
 <p>v0.10.0 的 102 项单元测试全部通过。现有浏览器主流程 45 项、整页阅读 20 项、阅读偏好 9 项、重复词稳定性 12 项、选区稳定性 34 项、语言胶囊 14 项、页面暂存 13 项、紧凑排版 21 项、MT 与中文去重 12 项、行内结构 21 项、连接诊断 6 项均已以隔离浏览器和本地兼容服务重跑通过。长选区和 120 块吞吐回归也已通过。机器记录的 version 均为 0.10.0；这些检查不评价真实模型的语义质量。</p>
 <p>新增总结的跨视图阅读位置、错误提示出现时的锚点、隐藏/编辑正文根节点边界均有专门回归。静态检查覆盖 29 个生产脚本和严格 CSP；渲染依赖不包含动态执行。机械设计检测无发现，独立收尾检查与文档核对另有记录。</p>
-<h2 id="section-8">翻译基线（v0.9.1）</h2>
+<h2 id="section-9">翻译基线（v0.9.1）</h2>
 <p>以下为 v0.9.1 已有记录；本版重跑回执见上一节；以下历史记录保留原版本与范围，不计作额外的新检查。</p>
 <ul>
 <li>91 项单元测试：新增结构映射、重复段落、行内代码、旧任务修订拒绝、有效期、容量和输入校验；保留模型、分批与黑名单测试。</li>
@@ -79,24 +88,24 @@
 <li>v0.9.1 没有新增权限。其真实操作系统右键点击沿用 v0.3.0 记录，菜单行为与权限保持一致，更新名称；回调链路在 v0.9.1 重跑。v0.10.0 的总结右键与 sidePanel 权限见本页开头。</li>
 </ul>
 <p>机器结果：verification/page-memory-e2e.json、extension-e2e.json、inline-structure-0.9.1.json、selection-capsule-e2e.json、page-translation-e2e.json、reading-preferences-e2e.json、repeated-word-0.9.1.json、selection-stability-0.9.1.json、reader-throughput-0.9.1.json、long-text-0.9.1.json。真实服务商质量与付费账户权限不在本地固定响应测试的评价范围内。</p>
-<h2 id="section-9">模型访问错误（v0.9.1）</h2>
+<h2 id="section-10">模型访问错误（v0.9.1）</h2>
 <p>本地回归新增 6 项单元与 6 项浏览器专项，覆盖两种实测 403 错误的 code／type 提取、受控原因分类、HTTP／错误码／请求编号完整传递、敏感响应不回显、超大或非 JSON 错误响应、窄屏、失败不保存、成功重试及额度错误后整页暂停。</p>
 <p>另经用户授权，仅使用临时 Key 做 3 次短词实测：专属域名的原插件请求和官方最简请求均返回 HTTP 403 / insufficient_quota，公共域名返回 HTTP 403 / AllocationQuota.FreeTierOnly，均明确提示免费额度耗尽。凭据仅在内存使用，随后清除；未改动余额、额度或计费设置。此实测不代表翻译成功或质量验收。见<a href="qwen-access-diagnosis.html">诊断与操作说明</a>。</p>
 <p>记录：verification/model-access-0.9.1.json、verification/qwen-live-access-2026-11-03.json。</p>
-<h2 id="section-10">通用文本标签映射（v0.9.0）</h2>
+<h2 id="section-11">通用文本标签映射（v0.9.0）</h2>
 <p>21 项新增真实浏览器专项通过。直接从不可变 v0.8.0 ZIP 产生的旧平文缓存升级，同一扩展 ID、模型与存储保留，11 个兼容块直接恢复嵌套链接和格式，无新增模型请求。标签与属性不发给模型、不整体克隆 HTML；倒序响应按既有 ID 对齐；URL 文案即使旧模型改写过仍原样显示。</p>
 <p>覆盖 a、b／strong、i／em、code、font、上下标、删除线、语义标签与换行、bold／blod 兼容、代码类片段保护、原节点点击／路由、键盘与右键地址、中键和组合键新标签、导航按钮、嵌套链接和重复 ID 防护、模型 HTML 仅文本、原中文去重、颜色／字号／窄屏同步、font 属性变化、切换／刷新零请求、链接动态变化及原 HTML 精确恢复。原有“2 个链接在双语译文变成 0 个”的 ZIP 复现已转绿，两侧都为 2 个。</p>
 <p>命令与边界见<a href="inline-structure.html">通用行内标签映射</a>。机器记录：verification/inline-structure-0.9.1.json、verification/bilingual-link-analysis-0.9.1.json。截图：verification/inline-structure-reading.png。</p>
-<h2 id="section-11">小胶囊与目标语言专项（v0.8.0）</h2>
+<h2 id="section-12">小胶囊与目标语言专项（v0.8.0）</h2>
 <p>真实安装未经修改的扩展，原生拖选正文后观测到 140×34px、999px 圆角；工具条只显示“中文”，翻译和查看动作由悬浮提示及可访问名称说明。七种语言选择均保存到现有设置，保留原选区和其余偏好，发送的模型请求为 0；点击语言名称后，真实本地 HTTP 请求携带正确目标语种，词库按语言保存，已存结果再次点击不新增请求。</p>
 <p>更多中的真实语境开关、模拟网页事件拒绝、方向键／Enter、两级 Esc、关闭、375–1440px 底部／右侧边界、长语言名不溢出、刷新偏好保留、长选区按段且不写词库均通过。未引入调试开关、额外运行参数或权限。实际截图：verification/selection-capsule.png、selection-capsule-in-page.png。机器记录：verification/selection-capsule-e2e.json。</p>
-<h2 id="section-12">重复词增量对齐专项（v0.7.1）</h2>
+<h2 id="section-13">重复词增量对齐专项（v0.7.1）</h2>
 <p>v0.7.0 最小复现：实际收藏另一词导致已有 3 处标记全部重建；同段增删另一处重复词导致下划线及括号移除 14 次，原 4 处节点全部丢失，并记录到 3 个缺失帧。旧检查只在整组一致时保留，refresh 仍整页清空，一处真实命中变化也仍整段清空。</p>
 <p>现已移除这两条预清空路径，按实际 Text 节点和命中范围增量更新；扫描等候期间保留原结果，括号内容与颜色原位修改。相同复现中已有 3／4 处标记及释义全部保留，缺失帧为 0；动态项本身被网页移除时按实际内容清理。源分片序列支持局部拆装后精确恢复。连续广播、换色、删除撤销和多种页面结构的检查见 <a href="annotation-stability.html">根因与方案</a>。</p>
-<h2 id="section-13">千问 MT 与中文去重专项（v0.7.0）</h2>
+<h2 id="section-14">千问 MT 与中文去重专项（v0.7.0）</h2>
 <p>12 项真实浏览器专项通过：新选千问默认 MT／Key 空白／官方获取入口相邻；通用型号仍可选与窄屏布局；单 user + translation_options 的真实 HTTP 划词；中文与技术标识段落不请求、不重复；混合段落只显示外语译文；日语提示与假名处理；仅译文中文保留及链接事件；旧中文缓存过滤且刷新零请求；标记损坏的安全回退与两并发；普通对话模型同样过滤中文；目标英语仍翻译中文；全中文页面零请求、零重复块。</p>
 <p>单元另验证 MT 所有语种、原文与密钥分离、边界乱序／遗漏／重复、受保护代码、部分失败、网络与超时无请求风暴、排队取消不发请求。测试采用隔离浏览器与本机固定响应服务，未读取或消耗用户真实 API Key；真实供应商账号能力与语义质量需由用户配置后确认。机器记录：verification/mt-chinese-e2e.json。截图：verification/qwen-mt-setup.png、verification/chinese-bilingual.png。</p>
-<h2 id="section-14">小猫、排版、页面暂存与升级专项</h2>
+<h2 id="section-15">小猫、排版、页面暂存与升级专项</h2>
 <div class="table-scroll"><table>
 <thead>
 <tr>
@@ -160,10 +169,10 @@
 </tbody>
 </table></div>
 <p>截图：verification/dianyi-pet-idle.png、dianyi-pet-menu.png、dianyi-text-only-reading.png。复现：node scripts/e2e.mjs tests/page_memory_e2e.py。</p>
-<h2 id="section-15">界面留白专项（v0.6.1）</h2>
+<h2 id="section-16">界面留白专项（v0.6.1）</h2>
 <p>不可变的 v0.6.0 ZIP 中，单个 36px 菜单项变为 134.39px；仅移除间距仍为 132px。根因是译文进入 16px 图标列，且夹带数字徽标。当前 8 项侧栏从原 345px 变为 363px，旧版为 543.56px；7 项保持原高 36px，一项长标签使用 54px。图标、数字徽标横向位置保持一致，短标签原译文并排，较长中文作为一体换到次行。</p>
 <p>另外覆盖匿名 flex 文本、一个按钮内多个片段、nowrap／ellipsis、仅译文数字不变、全部临时包裹清理、原 HTML 与文本节点身份还原、刷新缓存不请求模型且小猫隐藏。机器记录：verification/compact-baseline-0.6.0.json、compact-baseline-0.6.0-minimal.json、compact-layout-0.6.1.json。方案见 <a href="compact-layout.html">界面留白优化</a>。</p>
-<h2 id="section-16">重复词闪烁专项（v0.5.1）</h2>
+<h2 id="section-17">重复词闪烁专项（v0.5.1）</h2>
 <p>最小复现只有两个相同词和同段中的数字；本地脚本每 45ms 更新一次数字，不配置模型、不移动鼠标。旧版在 0.9 秒观测窗口内移除并重建 40 个下划线；括号模式同样移除、重建 40 个释义。更新另一个段落时没有重建，单词只有一处的对照也会重建，指向无条件整段刷新。</p>
 <p>根因是 MutationObserver 将局部文字变动提交给 startScan，扫描入口每次先 clearAnnotations 再重新标记。标记数量始终正确，节点却不断被替换，造成正文闪烁。修复在清除前按当前原文、实际 Text 节点、词库 ID、片段范围、括号位置和释义检查现有结果；一致时直接保留节点，实际匹配变化时才更新。注入释义在源匹配中透明跳过，使单词边界和跨行内元素词组仍正确。</p>
 <div class="table-scroll"><table>
@@ -218,7 +227,7 @@
 </tbody>
 </table></div>
 <p>回归同时检查最终数量、移除／新增次数、节点身份及恢复；静态最终数量正确不足以发现持续重建。机器记录：verification/repeated-word-baseline-0.5.0.json、verification/repeated-word-0.5.1.json。复现命令：node scripts/e2e.mjs tests/repeated_word_e2e.py。</p>
-<h2 id="section-17">批次配置、映射与调色板专项（v0.5.0）</h2>
+<h2 id="section-18">批次配置、映射与调色板专项（v0.5.0）</h2>
 <ul>
 <li>每批块数默认为 16，可配置 1–64；字符与片段预算随块数扩展，默认 9600 字符／192 片段，整体上限 24000 字符／768 片段。</li>
 <li>真实加载生产扩展，分别观察到完整的 16、32、64 块请求。测试服务故意同时倒序返回块数组及片段数组；65 个段落的原 Text 节点、链接与强调文字全部按 ID 写回，代码保留；恢复时原 HTML 精确一致。</li>
@@ -230,7 +239,7 @@
 </ul>
 <p>默认 16 块的吞吐回归：120 个不同短段落共 9 次真实 HTTP 模型请求，重复运行新增 0 次；当前视口优先、独立配色与侧线检查通过。固定本地延迟测试不代表真实模型生成速度，记录见 verification/reader-throughput-0.5.0.json。</p>
 <p>机器记录：verification/reading-preferences-e2e.json（9 项通过）。设置截图：verification/reading-preferences.png、verification/reading-preferences-mobile.png。</p>
-<h2 id="section-18">批量与视口专项（v0.4.0 历史对照）</h2>
+<h2 id="section-19">批量与视口专项（v0.4.0 历史对照）</h2>
 <div class="table-scroll"><table>
 <thead>
 <tr>
@@ -270,10 +279,10 @@
 <p>120 个不同短段落、每次请求固定 80ms 本地服务延迟，真实加载完整扩展并经过真实 HTTP；不代表真实 LLM 生成速度，也未使用用户凭据或额度。保存的基线明确记录旧版失败条件。v0.4.0 验收包含侧线；当前 v0.6.0 改为文字颜色区分、无背景与边框，继续验证合并、视口优先与缓存。</p>
 <p>短块每批最多 8 块、2400 字符、60 片段；首个可见块单发，保留两个并发。400 块预算从当前视口选择，并验证滚动到第 405 块时当前位置仍在首轮范围。模型只返回一份对齐译文；格式不支持或某块损坏时，保留原文并在用户重试时逐段处理，已完成块不重发。401 与 429 都验证最多两个请求后暂停，无自动重试循环。相同短块复用缓存，16 个相同块最多两个真实请求。</p>
 <p>机器记录：verification/reader-throughput-baseline-0.3.1.json、verification/reader-throughput-0.4.0.json、verification/page-translation-e2e.json。双语实际截图：verification/bilingual-reading-preview.png、verification/page-bilingual-dark.png。</p>
-<h2 id="section-19">释义卡片专项</h2>
+<h2 id="section-20">释义卡片专项</h2>
 <p>使用用户反馈的原句，通过真实划词、本地 HTTP 模型响应与词库悬浮链路验证。译文先显示，完整原文以较小字号置后；移除词性、风格等重复信息，底部仅保留已存状态、编辑与删除。375px 与 240px 窄窗口不横向溢出，长释义可滚动且不截断；键盘关闭、删除撤销、加载取消和错误反馈仍通过原有浏览器检查。实际截图见 verification/tooltip-card.png 和 verification/tooltip-in-page.png。</p>
 <p>以上保留旧版卡片设计验证。本段所述常规回归与页面暂存检查为历史记录；v0.10.0 的新增总结证据见本页开头。翻译原生菜单历史记录来自 v0.3.0，当前产品名称为「点译」。</p>
-<h2 id="section-20">默认开启与右键专项</h2>
+<h2 id="section-21">默认开启与右键专项</h2>
 <div class="table-scroll"><table>
 <thead>
 <tr>
@@ -337,7 +346,7 @@
 </tbody>
 </table></div>
 <p>原生菜单专门使用独立有界面 Chrome for Testing 和本机固定响应服务，不使用生产账号、用户 Key 或付费额度。四次操作通过操作系统菜单实际点击，记录见 native-context-menu.json；常规自动化中的额外菜单回放钩子仅存在测试副本，生产包不包含。</p>
-<h2 id="section-21">保留能力</h2>
+<h2 id="section-22">保留能力</h2>
 <div class="table-scroll"><table>
 <thead>
 <tr>
@@ -388,7 +397,7 @@
 </tr>
 </tbody>
 </table></div>
-<h2 id="section-22">按块阅读专项</h2>
+<h2 id="section-23">按块阅读专项</h2>
 <div class="table-scroll"><table>
 <thead>
 <tr>
@@ -452,9 +461,9 @@
 </tbody>
 </table></div>
 <p>后台标签页的空闲回调超时时可能只有零预算；扫描现已在 didTimeout 时仍按 200 节点／8ms 上限继续，避免切换括号释义后后台标记长时间缺失。调色板专项的实际失败路径已重跑通过。</p>
-<h2 id="section-23">本机性能</h2>
+<h2 id="section-24">本机性能</h2>
 <p>固定本地文章 22425 字符、400 段，预置 10000 词条、800 处标记；检查页面长任务与鼠标悬浮到下一帧的响应时间（P95 目标不超过 150ms）。当前数值见 verification/extension-e2e.json 的 performance 字段。这组结果不包含真实模型网络耗时，也不代表所有网站和设备。</p>
-<h2 id="section-24">验证边界</h2>
+<h2 id="section-25">验证边界</h2>
 <ol>
 <li>Chrome for Testing / Chromium 151 实测。本机未安装原生 Edge，Edge 使用同一 MV3 包，但原生安装仍需在目标设备确认。</li>
 <li>按用户要求，生产清单使用 HTTP(S) 网站访问以实现默认开启。浏览器安装／升级确认及受管设备策略由用户和浏览器控制，不自动代点新增权限。</li>
@@ -462,7 +471,7 @@
 <li>主文档可读文字为当前范围，PDF、OCR、iframe、Shadow DOM 和 Canvas 仍不支持。</li>
 <li>本版本提供词库导出，暂不提供导入或云同步。</li>
 </ol>
-<h2 id="section-25">复现命令</h2>
+<h2 id="section-26">复现命令</h2>
 <pre><code class="language-sh">npm ci
 npm run build:renderers
 npm run check
@@ -485,4 +494,4 @@ node scripts/e2e.mjs tests/model_access_e2e.py
 node scripts/e2e.mjs tests/summary_e2e.py
 </code></pre>
 <p>原生菜单可额外运行 node scripts/e2e.mjs tests/native_context_check.py，在独立测试浏览器通过真实菜单完成操作。所有测试配置与用户的日常浏览器隔离。</p>
-<footer class="doc-footer">点译 v0.14.0 · 自己的模型，按块阅读<br>文档提供 HTML 阅读版及 Markdown 可编辑版本。</footer></main></div></body></html>
+<footer class="doc-footer">点译 v0.14.1 · 自己的模型，按块阅读<br>文档提供 HTML 阅读版及 Markdown 可编辑版本。</footer></main></div></body></html>

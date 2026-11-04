@@ -381,14 +381,26 @@ async function handle(message, sender) {
     case 'SHIYI/KNOWLEDGE_READY': await requireContent(sender); return knowledge.captureTab(sender.tab.id,{documentReady:true,visitToken:knowledgeNavigations.get(sender.tab.id)?.id});
     case 'SHIYI/KNOWLEDGE_LIST': uiOnly(sender); return knowledge.list(message);
     case 'SHIYI/KNOWLEDGE_DETAIL': uiOnly(sender); return knowledge.detail(boundedText(message.id,100,'记录标识'));
-    case 'SHIYI/KNOWLEDGE_REVIEW': uiOnly(sender); return knowledge.createReview(message);
+    case 'SHIYI/KNOWLEDGE_REVIEW': uiOnly(sender); return knowledge.createReview({...message,automatic:false});
     case 'SHIYI/KNOWLEDGE_EDIT': uiOnly(sender); await knowledge.updateVisit(message.id,message);return {};
     case 'SHIYI/KNOWLEDGE_DELETE': uiOnly(sender);await knowledge.remove(message.ids);return {};
     case 'SHIYI/KNOWLEDGE_CLEAR': uiOnly(sender);return knowledge.clear(message.filter);
     case 'SHIYI/KNOWLEDGE_RETRY': uiOnly(sender);await knowledge.retry(message.id);return {};
     case 'SHIYI/KNOWLEDGE_RESUME': uiOnly(sender);await knowledge.resume();return {};
     case 'SHIYI/KNOWLEDGE_EXPORT': uiOnly(sender);return knowledge.exportData(message.filter,message.originals===true);
-    case 'SHIYI/KNOWLEDGE_PREFS': uiOnly(sender);await settings.saveKnowledgePrefs(message.prefs);await knowledge.scheduleNext();await broadcast();return {};
+    case 'SHIYI/AUTO_SUMMARY_SET': {
+      uiOnly(sender);assert(typeof message.enabled==='boolean','INVALID_INPUT','请选择是否开启自动总结。');
+      await settings.saveKnowledgePrefs({autoSummary:message.enabled});await knowledge.setAutomatic(message.enabled);
+      if(message.enabled)for(const tab of await chrome.tabs.query({}))void knowledge.captureTab(tab.id).catch(()=>{});
+      await broadcast();return {};
+    }
+    case 'SHIYI/KNOWLEDGE_PREFS': {
+      uiOnly(sender);const before=(await settings.config()).knowledgePrefs.autoSummary;
+      await settings.saveKnowledgePrefs(message.prefs);const enabled=(await settings.config()).knowledgePrefs.autoSummary;
+      await knowledge.setAutomatic(enabled);
+      if(enabled&&!before)for(const tab of await chrome.tabs.query({}))void knowledge.captureTab(tab.id).catch(()=>{});
+      await broadcast();return {};
+    }
     case 'SHIYI/SUMMARY_STOP': uiOnly(sender); summaries.stop(message.tabId); return {};
     case 'SHIYI/SAVE_SUMMARY_PREFS': uiOnly(sender); await settings.saveSummaryPrefs(message.prefs); await broadcast(); return {};
     case 'SHIYI/SAVE_SUMMARY_PROFILE': {
