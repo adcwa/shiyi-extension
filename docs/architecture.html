@@ -1,7 +1,7 @@
-<!doctype html><html lang="zh-CN"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>点译 v0.12.1 · 实现说明</title><style>*{box-sizing:border-box}html{scroll-behavior:smooth;scroll-padding-top:90px}body{margin:0;background:#f5f5f0;color:#263735;font:14px/1.95 -apple-system,BlinkMacSystemFont,"Segoe UI","PingFang SC",sans-serif}a{color:#006665;text-decoration:none}a:hover{text-decoration:underline}header{padding:18px 30px;position:sticky;top:0;background:#fbfcf8ef;border-bottom:1px solid #dfe5df;backdrop-filter:blur(10px);display:flex;align-items:center;justify-content:space-between;gap:18px;z-index:5}.brand{font-size:23px;font-weight:650;letter-spacing:2px}header small{font-size:11px;color:#61716c;letter-spacing:.7px}.layout{max-width:1400px;display:grid;grid-template-columns:218px minmax(0,1fr);gap:30px;margin:auto;padding:35px 30px 60px}nav{position:sticky;top:105px;height:calc(100vh - 130px);overflow:auto;padding-right:12px}nav small{display:block;font-size:10px;letter-spacing:1.6px;color:#61716c;margin:0 10px 15px}nav a{display:block;padding:8px 10px;margin:3px 0;border-radius:7px;color:#61716c;font-size:12px}nav a:hover{background:#eaf3ee;text-decoration:none;color:#006665}main{min-width:0;border:1px solid #dfe5df;border-radius:13px;background:#fff;padding:37px 43px 45px}.eyebrow{font-size:10px;color:#006665;letter-spacing:2px;margin-bottom:12px;font-weight:600}h1{font-size:30px;font-weight:600;line-height:1.4;margin:0 0 15px;letter-spacing:-.6px}h2{font-size:21px;font-weight:550;margin:37px 0 15px;line-height:1.5}h3{font-size:16px;font-weight:550;margin:25px 0 12px}p{margin:11px 0 17px}blockquote{margin:24px 0;background:#edf4ec;border-left:3px solid #006665;padding:16px 20px;border-radius:0 8px 8px 0;color:#406247;font-size:13px}blockquote p{margin:0}.table-scroll{overflow-x:auto;border:1px solid #dfe5df;border-radius:9px;margin:17px 0 23px}table{width:100%;border-collapse:collapse;font-size:12px;line-height:1.9}th{text-align:left;background:#f2f7ed;color:#4e704d;font-weight:500;padding:12px 14px;border-bottom:1px solid #dfe5df}td{padding:13px 14px;border-bottom:1px solid #e5ebe0;vertical-align:top;min-width:100px}tr:last-child td{border-bottom:0}td:first-child{min-width:130px}tr:nth-child(even) td{background:#fcfdf8}ul,ol{padding-left:23px}li{margin:8px 0}code{background:#eef3e8;border-radius:4px;padding:2px 5px;font-size:12px;overflow-wrap:anywhere}pre{padding:17px 19px;border-radius:8px;background:#eef3e8;overflow:auto;font-size:12px}pre code{padding:0}strong{font-weight:600}.doc-footer{font-size:11px;line-height:1.9;color:#61716c;border-top:1px solid #dfe5df;padding-top:22px;margin-top:35px}.source-label{font-size:10px;color:#61716c;letter-spacing:.5px}.download{font-size:12px;padding:9px 14px;border:1px solid #006665;color:#006665;border-radius:8px;white-space:nowrap;display:inline-block}@media(max-width:900px){.layout{grid-template-columns:175px minmax(0,1fr);gap:20px;padding:25px 20px}main{padding:28px 27px}header small{display:none}}@media(max-width:650px){header{padding:14px 19px}.brand{font-size:20px}.layout{display:block;padding:20px 13px}nav{height:auto;position:static;display:flex;flex-wrap:wrap;gap:5px;padding:0;margin-bottom:18px}nav small{width:100%;margin:0 6px 5px}nav a{font-size:10px;padding:5px 8px;border:1px solid #dfe5df;margin:0}main{padding:25px 20px}h1{font-size:24px}h2{font-size:20px}.table-scroll{margin-left:-6px;margin-right:-6px}table{font-size:11px}td,th{padding:10px;min-width:120px}.download{font-size:10px}}@media(prefers-reduced-motion:reduce){html{scroll-behavior:auto}}@media print{header,nav{display:none}.layout{display:block;padding:0}body{background:white}main{border:0;padding:0}h2{break-after:avoid}tr{break-inside:avoid}}</style></head><body><header><div><span class="brand">点译</span> <small>点一下，读懂。 / v0.12.1</small></div><span class="source-label">CHROME / EDGE</span></header><div class="layout"><nav aria-label="文档目录"><small>CONTENTS / 目录</small><a href="#section-1">默认开启与黑名单</a><a href="#section-2">模块边界</a><a href="#section-3">升级迁移</a><a href="#section-4">原生右键菜单</a><a href="#section-5">模型连接与翻译请求</a><a href="#section-6">原生总结侧栏与入口</a><a href="#section-7">独立总结连接、正文与流式任务</a><a href="#section-8">总结渲染、制品与构建</a><a href="#section-9">千问 MT 与中文去重</a><a href="#section-10">短词与按块阅读</a><a href="#section-11">页面暂存与恢复</a><a href="#section-12">紧凑界面排版</a><a href="#section-13">数据与验证</a><a href="#section-14">官方参考</a></nav><main><div class="eyebrow">IMPLEMENTATION / 实现说明</div><h1>点译 v0.10.0 · 实现说明</h1>
-<p>2026-11-03</p>
+<!doctype html><html lang="zh-CN"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>点译 v0.13.0 · 实现说明</title><style>*{box-sizing:border-box}html{scroll-behavior:smooth;scroll-padding-top:90px}body{margin:0;background:#f5f5f0;color:#263735;font:14px/1.95 -apple-system,BlinkMacSystemFont,"Segoe UI","PingFang SC",sans-serif}a{color:#006665;text-decoration:none}a:hover{text-decoration:underline}header{padding:18px 30px;position:sticky;top:0;background:#fbfcf8ef;border-bottom:1px solid #dfe5df;backdrop-filter:blur(10px);display:flex;align-items:center;justify-content:space-between;gap:18px;z-index:5}.brand{font-size:23px;font-weight:650;letter-spacing:2px}header small{font-size:11px;color:#61716c;letter-spacing:.7px}.layout{max-width:1400px;display:grid;grid-template-columns:218px minmax(0,1fr);gap:30px;margin:auto;padding:35px 30px 60px}nav{position:sticky;top:105px;height:calc(100vh - 130px);overflow:auto;padding-right:12px}nav small{display:block;font-size:10px;letter-spacing:1.6px;color:#61716c;margin:0 10px 15px}nav a{display:block;padding:8px 10px;margin:3px 0;border-radius:7px;color:#61716c;font-size:12px}nav a:hover{background:#eaf3ee;text-decoration:none;color:#006665}main{min-width:0;border:1px solid #dfe5df;border-radius:13px;background:#fff;padding:37px 43px 45px}.eyebrow{font-size:10px;color:#006665;letter-spacing:2px;margin-bottom:12px;font-weight:600}h1{font-size:30px;font-weight:600;line-height:1.4;margin:0 0 15px;letter-spacing:-.6px}h2{font-size:21px;font-weight:550;margin:37px 0 15px;line-height:1.5}h3{font-size:16px;font-weight:550;margin:25px 0 12px}p{margin:11px 0 17px}blockquote{margin:24px 0;background:#edf4ec;border-left:3px solid #006665;padding:16px 20px;border-radius:0 8px 8px 0;color:#406247;font-size:13px}blockquote p{margin:0}.table-scroll{overflow-x:auto;border:1px solid #dfe5df;border-radius:9px;margin:17px 0 23px}table{width:100%;border-collapse:collapse;font-size:12px;line-height:1.9}th{text-align:left;background:#f2f7ed;color:#4e704d;font-weight:500;padding:12px 14px;border-bottom:1px solid #dfe5df}td{padding:13px 14px;border-bottom:1px solid #e5ebe0;vertical-align:top;min-width:100px}tr:last-child td{border-bottom:0}td:first-child{min-width:130px}tr:nth-child(even) td{background:#fcfdf8}ul,ol{padding-left:23px}li{margin:8px 0}code{background:#eef3e8;border-radius:4px;padding:2px 5px;font-size:12px;overflow-wrap:anywhere}pre{padding:17px 19px;border-radius:8px;background:#eef3e8;overflow:auto;font-size:12px}pre code{padding:0}strong{font-weight:600}.doc-footer{font-size:11px;line-height:1.9;color:#61716c;border-top:1px solid #dfe5df;padding-top:22px;margin-top:35px}.source-label{font-size:10px;color:#61716c;letter-spacing:.5px}.download{font-size:12px;padding:9px 14px;border:1px solid #006665;color:#006665;border-radius:8px;white-space:nowrap;display:inline-block}@media(max-width:900px){.layout{grid-template-columns:175px minmax(0,1fr);gap:20px;padding:25px 20px}main{padding:28px 27px}header small{display:none}}@media(max-width:650px){header{padding:14px 19px}.brand{font-size:20px}.layout{display:block;padding:20px 13px}nav{height:auto;position:static;display:flex;flex-wrap:wrap;gap:5px;padding:0;margin-bottom:18px}nav small{width:100%;margin:0 6px 5px}nav a{font-size:10px;padding:5px 8px;border:1px solid #dfe5df;margin:0}main{padding:25px 20px}h1{font-size:24px}h2{font-size:20px}.table-scroll{margin-left:-6px;margin-right:-6px}table{font-size:11px}td,th{padding:10px;min-width:120px}.download{font-size:10px}}@media(prefers-reduced-motion:reduce){html{scroll-behavior:auto}}@media print{header,nav{display:none}.layout{display:block;padding:0}body{background:white}main{border:0;padding:0}h2{break-after:avoid}tr{break-inside:avoid}}</style></head><body><header><div><span class="brand">点译</span> <small>点一下，读懂。 / v0.13.0</small></div><span class="source-label">CHROME / EDGE</span></header><div class="layout"><nav aria-label="文档目录"><small>CONTENTS / 目录</small><a href="#section-1">默认开启与黑名单</a><a href="#section-2">模块边界</a><a href="#section-3">升级迁移</a><a href="#section-4">原生右键菜单</a><a href="#section-5">模型连接与翻译请求</a><a href="#section-6">原生总结侧栏与入口</a><a href="#section-7">独立总结连接、正文与流式任务</a><a href="#section-8">总结渲染、制品与构建</a><a href="#section-9">千问 MT 与中文去重</a><a href="#section-10">短词与按块阅读</a><a href="#section-11">页面暂存与恢复</a><a href="#section-12">紧凑界面排版</a><a href="#section-13">数据与验证</a><a href="#section-14">阅读知识执行链</a><a href="#section-15">官方参考</a></nav><main><div class="eyebrow">IMPLEMENTATION / 实现说明</div><h1>点译 v0.13.0 · 实现说明</h1>
+<p>2026-11-04</p>
 <h2 id="section-1">默认开启与黑名单</h2>
-<p>Manifest V3 声明 HTTP／HTTPS 网站访问和一组静态主文档内容脚本，普通网页默认启用。浏览器内部页、扩展商店、PDF、iframe 与 Shadow DOM 内容仍不处理。初始黑名单为空，打开网页只匹配本地词库，模型请求由明确翻译操作触发。</p>
+<p>Manifest V3 声明 HTTP／HTTPS 网站访问和一组静态主文档内容脚本，普通网页默认启用。浏览器内部页、扩展商店、PDF、iframe 与 Shadow DOM 内容仍不处理。初始黑名单为空，翻译由明确操作触发；总结按已授权需求默认后台采集并处理符合条件的网页，不依赖侧栏可见性。</p>
 <p>lib/site-policy.js 将域名或完整网址规范化为域名，按同域名及子域名匹配，跨协议和端口。合并重复和被父域覆盖的规则，避免恢复网站时还残留另一条覆盖规则。BLACKLIST_SET 仅可信 UI 可调用；原生菜单从浏览器事件进入同一操作。</p>
 <p>加入黑名单先取消匹配域名的在途请求，再保存配置并广播，所有相关标签页撤去标记和译文。恢复规则会向已有页面注入或刷新，使功能立即恢复。每个翻译请求及响应落库前均重新检查真实 sender 的 tabId、documentId、frameId、生命周期与黑名单，不允许内容脚本指定任意端点或绕过停用。</p>
 <h2 id="section-2">模块边界</h2>
@@ -15,7 +15,7 @@
 <tbody>
 <tr>
 <td>manifest.json</td>
-<td>HTTP(S) 主文档静态注入；storage、scripting、activeTab、contextMenus、sidePanel 权限，无外部通信入口</td>
+<td>HTTP(S) 主文档静态注入；storage、scripting、activeTab、contextMenus、sidePanel、alarms、unlimitedStorage 权限，无外部通信入口</td>
 </tr>
 <tr>
 <td>background.js</td>
@@ -67,7 +67,23 @@
 </tr>
 <tr>
 <td>lib/summary-extract.js、summary-manager.js</td>
-<td>隔离正文提取、每标签页任务、来源失效、会话结果与侧栏消息</td>
+<td>隔离正文提取、将原生侧栏订阅适配到持久知识执行器</td>
+</tr>
+<tr>
+<td>content/knowledge.js</td>
+<td>页面就绪、导航及可读正文采集通知，排除插件自身变化，避免局部时钟触发重复请求</td>
+</tr>
+<tr>
+<td>lib/knowledge-store.js、knowledge-manager.js</td>
+<td>独立 IndexedDB、事务保存、持久任务、去重、上下文／权限、定时分层回顾、删除依赖和导出选择</td>
+</tr>
+<tr>
+<td>lib/knowledge-core.js、knowledge-export.js</td>
+<td>时区与自然周期、输入分批、提示词、来源链接处理、Markdown／JSONL／CSV／ZIP 投影</td>
+</tr>
+<tr>
+<td>ui/knowledge.js、knowledge.css</td>
+<td>轨迹与回顾查看、筛选、备注草稿、来源／版本、制品与下载</td>
 </tr>
 <tr>
 <td>summary.html、ui/summary.js、ui/summary.css</td>
@@ -101,8 +117,8 @@
 <h2 id="section-7">独立总结连接、正文与流式任务</h2>
 <p>配置的 <code>summaryProfile</code>／<code>summaryPrefs</code> 与原 <code>profile</code>／<code>prefs</code> 分离；<code>summaryCredential</code> 与 <code>credential</code> 是独立的 session／local 记录，分别按端点及鉴权身份匹配，即使同地址也不读取另一用途的 Key。两套凭据均默认会话保存，分别明确 <code>rememberKey</code> 才写 local，均限制可信扩展上下文。总结默认为千问 <code>qwen-flash</code>，拒绝 <code>qwen-mt-*</code>；翻译默认及 MT 协议不变。保存总结配置或清除 Key 会停止相关总结，不修改翻译连接。连接测试用固定短文检查真实流式能力，不发送网页资料。</p>
 <p><code>summary-extract.js</code> 通过 <code>chrome.scripting.executeScript</code> 在顶层隔离环境优先读取 article，再读 main／主区域，最后回退正文。排除表单值、编辑区、隐藏、导航、侧边及插件节点，保留主要正文代码与表格；不进入 iframe、Shadow DOM、PDF、Canvas。仅译文模式通过原文访问器恢复来源文字。最多 60,000 字符及有界节点遍历，截取标志进入公开状态；执行前后核对真实标签页 URL，防止把切换前页面当作当前来源。</p>
-<p><code>summary-manager.js</code> 每标签页独立维护 job、代次与结果。侧栏端口只能绑定自身 URL 中的固定 tabId，不监听活动标签来切换来源；端口的可见状态与浏览器标签激活状态共同限定自动任务。首次绑定即自动总结，导航／刷新中止旧请求并标 stale，等待当前页加载且侧栏可见后生成新结果；未打开、隐藏或已关闭侧栏的页面不发起新请求。<code>ensure</code> 合并弹窗打开、端口绑定、可见性与原生打开事件，按同一页及预设复用在途任务或结果。错误和停止结果不自动重试，明确重新总结才强制生成。代次检查阻止旧提取、旧流和异步失效标记覆盖新页。</p>
-<p>每次启动重新检查普通网页、黑名单、网站访问权限、总结配置和模型来源权限；网页不能自选模型端点或绕过网站停用。黑名单同步将相关 tab 的侧栏设为 disabled 并停止其任务，不取消其他域名任务；移出黑名单只恢复入口。任务由后台持有，侧栏关闭不丢失已有结果；会话存储最多保留最近 8 页，标签关闭移除记录。后台重启将未完成任务改为中断状态，保留已暂存文本。任务有最长 3 分钟时限及 8 万字符输出上限。</p>
+<p><code>summary-panel.js</code> 保持每标签页独立的原生侧栏路径和显示状态；端口只能绑定自身 URL 中的 tabId。v0.13.0 的 <code>summary-manager.js</code> 适配到持久知识执行器，网页导航与可读通知触发后台采集，侧栏仅订阅当前页状态。打开、绑定、刷新和原生事件复用同一任务或结果，不以可见性决定是否总结。</p>
+<p>每次执行重新检查来源、上下文、黑名单、网站及模型权限；网页不能自选模型端点。禁用按域名取消，其他站点仍可处理；移出黑名单恢复后续采集而不强行打开侧栏。任务由后台持有，已保存快照不依赖来源标签页存活，结果长期保留。后台重启标记未完成的进行中任务为中断，保留部分文本；任务最长 3 分钟、输出最多 8 万字符。</p>
 <p>自动场景先以正文前 10,000 字符以内摘录请求一次非流式分类，再按选定场景请求 SSE 总结，正常共 2 次；手动场景只发 1 次。分类类型无效或分类内容不完整时回退通用总结并说明。所有总结使用简体中文，只分析提供资料，网页命令作为不可信内容，不额外联网调研。错误不自动重试，主动重新总结才新建任务。</p>
 <p><code>summary-model.js</code> 使用增量 UTF-8 和 SSE 解码，处理跨网络块事件及结束标志；只采集内容增量，区分断流、长度截断、拒绝、HTTP 服务错误、空结果和无效格式。以收到响应数据刷新 <code>timeoutSeconds</code> 空闲计时，该配置是无响应秒数，不是任务总时长。取消、断线和超限保留已经发布的文本，任务身份检查阻止迟到增量。请求不发送 Cookie／Referer、不允许重定向；跨增量密钥脱敏保护面板及导出。模型只收到正文和提示词，不附加页面 URL。</p>
 <h2 id="section-8">总结渲染、制品与构建</h2>
@@ -138,10 +154,15 @@
 <p>匿名文本节点位于 flex/grid 根容器时，仅用临时透明 span 包裹原节点，使原文和译文共享一个布局项；图标和计数仍在原列。原节点、元素及事件保留。一个阅读记录可以拥有多个译文片段；模式切换、主题与字号更新、取消、恢复及动态失效均统一遍历清理。PageMap 把临时包裹视为透明，不改变原始路径与结构签名，沿用现有本地结果。恢复精确还原原 HTML。</p>
 <p>具体方案、前后测量和回归命令见 <a href="compact-layout.html">界面留白优化</a>。</p>
 <h2 id="section-13">数据与验证</h2>
-<p>本地 IndexedDB 包含 entries、cache、meta、trash、pages，不涉及云端数据库。总结结果单独位于 chrome.storage.session 的 summaryResults，不与词库或翻译页面缓存混存。词库按标准化原文与目标语言去重，列表每页 50 条；缓存最多 1000 条、约 7 天，删除与编辑会清理旧缓存。撤销 8 秒有效，后台启动清理过期记录。导出包含词句与经过清理的来源，不包含 Key、请求头或页面查询参数。</p>
+<p>本地 IndexedDB 包含 entries、cache、meta、trash、pages，不涉及云端数据库。v0.13.0 总结结果使用独立 dianyi-knowledge IndexedDB：visits、documents、snapshots、summaries、jobs、meta；旧 summaryResults 会话逻辑仅保留于兼容库测试，生产执行器始终使用持久知识层。词库按标准化原文与目标语言去重，列表每页 50 条；缓存最多 1000 条、约 7 天，删除与编辑会清理旧缓存。撤销 8 秒有效，后台启动清理过期记录。导出包含词句与经过清理的来源，不包含 Key、请求头或页面查询参数。</p>
 <p>自动验证覆盖真实 MV3 注入、黑名单生效／恢复／重启、迁移保留、在途取消、权限与凭据边界、右键回调链路、原生选区和整页阅读。独立有界面浏览器另用真实操作系统菜单验收选区、整页、停用和恢复；结果见 verification/native-context-menu.json。</p>
 <p>总结专项使用未修改 ZIP 与真实本地 HTTP/SSE，记录为 verification/summary-0.10.0.json；原生 Chrome 工具栏和右键已实点验证。未使用真实付费厂家 Key，原生 Edge 安装及物理宽度拖动尚未完成确认。</p>
-<h2 id="section-14">官方参考</h2>
+<h2 id="section-14">阅读知识执行链</h2>
+<p>导航先登记访问，正文可读后以事务保存快照、文档指纹、摘要和任务，再调用模型。页面身份由完整 URL 的摘要标识，正文版本单独计算；保存用的来源链接保留常用文章参数，移除认证和追踪字段。队列有界串行，服务重启将进行中的任务标记中断，尚未启动的任务续办，避免自动重跑已付费用量。</p>
+<p>页面摘要与总结配置相同可复用，主动重新总结保留旧完成版本。页面上下文最多选择三条直接相关阅读；请求前递归复核来源与上下文的黑名单及权限。输入资料、用户备注和上层结论保存证据关系，删除沿依赖清理，旧流不能写回。</p>
+<p>日结按配置时区自然日，默认 18:00 阶段归纳，晚到资料后续补齐版本。周／月按日结、年按月结归纳；大输入无损分批保留 ID，层级归纳有上限。周期签名使用语义范围、证据版本、备注、提示词及模型，而非当前时钟，重复闹钟和后台唤醒不重复请求。已采集资料尚未完成时延迟回顾；空资料不访问模型。</p>
+<p>数据进入模型、写回及导出均检查来源策略。知识导出按白名单字段生成，不含配置或凭据；大批量导出超过传输边界时要求按筛选分批。完整行为见<a href="knowledge-guide.html">阅读知识指南</a>。</p>
+<h2 id="section-15">官方参考</h2>
 <ul>
 <li><a href="https://developer.chrome.com/docs/extensions/reference/api/contextMenus">Chrome contextMenus</a></li>
 <li><a href="https://developer.chrome.com/docs/extensions/develop/concepts/declare-permissions">Chrome 声明权限</a></li>
@@ -150,4 +171,4 @@
 <li><a href="https://developer.chrome.com/docs/extensions/reference/api/storage">存储访问级别</a></li>
 <li><a href="https://developer.chrome.com/docs/extensions/reference/api/runtime">Runtime 消息</a></li>
 </ul>
-<footer class="doc-footer">点译 v0.12.1 · 自己的模型，按块阅读<br>文档提供 HTML 阅读版及 Markdown 可编辑版本。</footer></main></div></body></html>
+<footer class="doc-footer">点译 v0.13.0 · 自己的模型，按块阅读<br>文档提供 HTML 阅读版及 Markdown 可编辑版本。</footer></main></div></body></html>

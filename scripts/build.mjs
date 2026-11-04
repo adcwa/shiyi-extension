@@ -10,7 +10,7 @@ await fs.mkdir(destination, { recursive: true });
 await fs.cp(path.join(root, 'src'), destination, { recursive: true, filter: source => !path.relative(path.join(root, 'src'), source).split(path.sep).some(part => part === '__pycache__' || part.startsWith('.')) && !source.endsWith('.pyc') });
 await fs.copyFile(path.join(root, 'docs/user-guide.md'), path.join(destination, 'INSTALL.md'));
 await fs.copyFile(path.join(root, 'docs/user-guide.html'), path.join(destination, 'INSTALL.html'));
-for (const name of ['provider-defaults.md', 'provider-defaults.html', 'summary-guide.md', 'summary-guide.html']) await fs.copyFile(path.join(root, 'docs', name), path.join(destination, name));
+for (const name of ['provider-defaults', 'summary-guide', 'knowledge-guide', 'verification', 'qwen-access-diagnosis', 'inline-structure', 'annotation-stability', 'compact-layout', 'block-reading', 'architecture'].flatMap(name => [name + '.md', name + '.html'])) await fs.copyFile(path.join(root, 'docs', name), path.join(destination, name));
 await fs.copyFile(path.join(root, 'docs', 'codex-setup.md'), path.join(destination, 'codex-setup.md'));
 const manifest = JSON.parse(await fs.readFile(path.join(destination, 'manifest.json'), 'utf8'));
 if (manifest.version !== pkg.version) throw new Error('Manifest version does not match package version');

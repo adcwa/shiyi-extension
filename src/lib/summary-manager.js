@@ -5,7 +5,8 @@ import { extractSummaryPage } from './summary-extract.js';
 import { runConnections } from './connections.js';
 
 const activePhases = new Set(['extracting', 'classifying', 'streaming']);
-export function createSummaryManager({ chromeApi, settings, tabState, permissionGranted }) {
+export function createSummaryManager({ chromeApi, settings, tabState, permissionGranted, knowledge }) {
+  if (knowledge) return {start:knowledge.start,ensure:knowledge.ensure,stop:knowledge.stop,snapshot:knowledge.snapshot,connect:knowledge.connect,cancelAll:knowledge.cancelAll,invalidate:knowledge.invalidate,remove:knowledge.removeTab};
   const states = new Map(), jobs = new Map(), ports = new Set(), launches = new Map(), notifications = new Map(), automatic = new Map(), revisions = new Map(); let persistTail = Promise.resolve(), saveTimer;
   const revise = tabId => revisions.set(tabId, (revisions.get(tabId) || 0) + 1);
   const loaded = chromeApi.storage.session.get('summaryResults').then(async ({ summaryResults = [] }) => {

@@ -2,6 +2,7 @@ import { DEFAULT_PREFS, DEFAULT_PROFILE, cleanPrefs, cleanProfile, secretIdentit
 import { migrateSitePolicy } from './site-policy.js';
 import { summaryPresetProfile, cleanSummaryProfile, DEFAULT_SUMMARY_PREFS, cleanSummaryPrefs } from './summary-presets.js';
 import { MAX_CONNECTIONS, connectionBank, connectionPurpose } from './connections.js';
+import { cleanKnowledgePrefs } from './knowledge-core.js';
 
 const credentialKey = purpose => purpose === 'summary' ? 'summaryCredentials' : 'modelCredentials';
 const legacyKey = purpose => purpose === 'summary' ? 'summaryCredential' : 'credential';
@@ -11,6 +12,7 @@ let tail = Promise.resolve();
 function normalizeConfig(value = {}) {
   const provider = value.profile?.provider ?? (value.profile?.endpoint ? 'custom' : DEFAULT_PROFILE.provider);
   const result = { ...migrateSitePolicy(value), prefs: { ...DEFAULT_PREFS, ...value.prefs }, profile: { ...DEFAULT_PROFILE, ...value.profile, provider }, summaryProfile: value.summaryProfile || summaryPresetProfile(), summaryPrefs: { ...DEFAULT_SUMMARY_PREFS, ...value.summaryPrefs }, modelConnections: { ...value.modelConnections } };
+  result.knowledgePrefs = cleanKnowledgePrefs(value.knowledgePrefs);
   for (const purpose of ['translation', 'summary']) {
     const field = purpose === 'translation' ? 'profile' : 'summaryProfile';
     let bank = result.modelConnections[purpose];
@@ -52,6 +54,7 @@ export function changeConfig(work) {
 }
 export const savePrefs = prefs => changeConfig(value => { value.prefs = cleanPrefs(prefs); });
 export const saveSummaryPrefs = prefs => changeConfig(value => { value.summaryPrefs = cleanSummaryPrefs(prefs); });
+export const saveKnowledgePrefs = prefs => changeConfig(value => { value.knowledgePrefs = cleanKnowledgePrefs(prefs); });
 async function secretFor(purpose, profile) {
   if (profile.auth === 'none' || profile.connectionId === null) return '';
   let id = profile.connectionId;

@@ -4,9 +4,9 @@ import { SUMMARY_PRESETS } from '../lib/summary-presets.js';
 const $ = selector => document.querySelector(selector), R = globalThis.DianyiDocs;
 let tabId, port, result, view = 'content', follow = true, frame, toastTimer, exportTarget, retryBusy = false, unloading = false;
 const artifacts = new Map(), sourceViews = new Set(), positions = new Map();
-const active = () => ['extracting', 'classifying', 'streaming'].includes(result?.phase);
+const active = () => ['queued','extracting', 'classifying', 'streaming'].includes(result?.phase);
 const scroller = $('#summary-scroller'), doc = $('#summary-doc');
-const statusLabels = { extracting: '正在读取网页…', classifying: '正在识别主题…', streaming: '正在生成总结…', complete: '总结完成', stopped: '已停止 · 内容已保留', interrupted: '生成已中断', error: '生成未完成' };
+const statusLabels = { queued:'已保存 · 排队总结中',waiting:'已保存 · 等待模型连接', extracting: '正在读取网页…', classifying: '正在识别主题…', streaming: '正在生成总结…', complete: '总结完成', stopped: '已停止 · 内容已保留', interrupted: '生成已中断', error: '生成未完成' };
 function toast(text) { clearTimeout(toastTimer); $('#notice').textContent = text; $('#notice').hidden = false; toastTimer = setTimeout(() => { $('#notice').hidden = true; }, 4000); }
 function remember() {
   if (!scroller.clientHeight || !scroller.dataset.resultId) return;
@@ -38,7 +38,7 @@ function render() {
   frame = null; remember();
   const s = result, hasText = !!s?.text;
   $('#source-title').textContent = s?.source?.title || '当前网页';
-  $('#source-detail').textContent = s ? [s.source?.domain, SUMMARY_PRESETS[s.chosen || s.preset]?.name, s.model].filter(Boolean).join(' · ') : '当前标签页 · 打开即总结';
+  $('#source-detail').textContent = s ? [s.source?.domain, SUMMARY_PRESETS[s.chosen || s.preset]?.name, s.model].filter(Boolean).join(' · ') : '当前标签页 · 优先读取本地总结';
   $('#summary-status').textContent = s ? statusLabels[s.phase] || '正在准备总结…' : '正在准备总结…';
   $('#summary-stop').hidden = !active(); $('#summary-retry').hidden = !s || active(); $('#summary-retry').disabled = retryBusy;
   const warnings = [];
@@ -48,7 +48,7 @@ function render() {
   $('#scope-note').textContent = warnings.join(' '); $('#scope-note').hidden = !warnings.length;
   const message = $('#summary-message'); message.classList.toggle('error', !!s?.error);
   if (s?.error) { message.replaceChildren(); const title = document.createElement('h2'); title.textContent = s.phase === 'stopped' ? '生成已停止' : '这次总结未完成'; const text = document.createElement('p'); text.textContent = s.error; message.append(title, text); }
-  else if (!hasText) { message.innerHTML = '<p>网页加载完成后，重点会逐步显示在这里。</p>'; }
+  else if (!hasText) { message.innerHTML = '<p>访问资料会先保存在本地，后台总结完成后显示在这里。</p>'; }
   else message.replaceChildren();
   const parsed = R.parse(s?.text || '', { streaming: s?.phase !== 'complete' });
   artifacts.clear(); parsed.artifacts.forEach(item => artifacts.set(item.id, item));

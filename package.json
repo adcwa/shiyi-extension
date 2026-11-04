@@ -1,6 +1,6 @@
 {
   "name": "dianyi-extension",
-  "version": "0.12.1",
+  "version": "0.13.0",
   "private": true,
   "type": "module",
   "description": "点译：自有模型按需翻译，已存词句跨网页主动提示",
@@ -17,9 +17,10 @@
     "node": ">=20"
   },
   "devDependencies": {
-    "markdown-it": "15.0.3",
-    "mermaid": "12.2.0",
+    "esbuild": "0.28.2",
+    "fake-indexeddb": "6.2.7",
     "katex": "0.19.1",
-    "esbuild": "0.28.2"
+    "markdown-it": "15.0.3",
+    "mermaid": "12.2.0"
   }
 }

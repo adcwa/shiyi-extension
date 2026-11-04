@@ -8,14 +8,17 @@ import { createContextMenus } from './lib/context-menu.js';
 import { cleanPageInfo, cleanPageBlocks } from './lib/page-cache.js';
 import { createSummaryManager } from './lib/summary-manager.js';
 import { createSummaryPanel } from './lib/summary-panel.js';
+import { createKnowledgeStore } from './lib/knowledge-store.js';
+import { createKnowledgeManager } from './lib/knowledge-manager.js';
 import { cleanSummaryProfile } from './lib/summary-presets.js';
 import { runSummaryModel } from './lib/summary-model.js';
 import { runConnections } from './lib/connections.js';
 import { connectionPermission, nativeCodex } from './lib/codex.js';
 
 const pending = new Map();
+const knowledgeNavigations=new Map();
 const backupNotices = new Set();
-const contentFiles = ['lib/text.js', 'lib/block-text.js', 'lib/page-map.js', 'content/inline-structure.js', 'content/companion.js', 'content/reader.js', 'content/content.js'];
+const contentFiles = ['lib/text.js', 'lib/block-text.js', 'lib/page-map.js', 'content/inline-structure.js', 'content/companion.js', 'content/reader.js', 'content/content.js','content/knowledge.js'];
 const uiPaths = new Set(['popup.html', 'options.html', 'summary.html']);
 function trusted(sender) {
   if (sender.id !== chrome.runtime.id || sender.tab?.url && !sender.url?.startsWith(chrome.runtime.getURL(''))) return false;
@@ -109,6 +112,7 @@ async function setSiteBlocked(input, blocked) {
   const site = blacklistSite(input);
   abortRequests(item => item.origin && domainMatches(new URL(item.origin).hostname, site));
   await settings.changeConfig(value => { value.blacklist = changeBlacklist(value.blacklist, site, blocked); });
+  await knowledge.restrict();
   await summaryPanels.syncAll();
   await broadcast();
   if (!blocked) await injectExisting(site);
@@ -116,7 +120,8 @@ async function setSiteBlocked(input, blocked) {
   if (active) await menus.update(active.id).catch(() => {});
   return { blacklist: (await settings.config()).blacklist };
 }
-const summaries = createSummaryManager({ chromeApi: chrome, settings, tabState, permissionGranted: connectionPermission });
+const knowledge = createKnowledgeManager({ chromeApi:chrome,settings,repository:createKnowledgeStore(),permissionGranted:connectionPermission });
+const summaries = createSummaryManager({ chromeApi: chrome, settings, tabState, permissionGranted: connectionPermission,knowledge });
 const summaryPanels = createSummaryPanel({ chromeApi: chrome, settings, tabState, summaries, whenReady: () => ready });
 const menus = createContextMenus(chrome, {
   state: async tabId => tabState(tabId, await settings.config()),
@@ -135,9 +140,11 @@ const ready = settings.initializeStorage().then(async () => {
   await store.purgeExpiredTrash();
   await syncScripts();
   await summaryPanels.initialize();
+  await knowledge.initialize();
   await menus.install();
   const [active] = await chrome.tabs.query({ active: true, currentWindow: true });
   if (active) await menus.update(active.id).catch(() => {});
+  chrome.tabs.query({}).then(tabs=>Promise.allSettled(tabs.filter(tab=>pageOrigin(tab.url)).map(tab=>knowledge.captureTab(tab.id)))).catch(()=>{});
 });
 
 async function handle(message, sender) {
@@ -148,6 +155,7 @@ async function handle(message, sender) {
       const value = await settings.config(), enabled = await enabledSender(sender, value);
       await setBadge(sender.tab?.id, enabled);
       if (!enabled) return { enabled: false };
+      knowledge.captureTab(sender.tab.id,{documentReady:true,visitToken:knowledgeNavigations.get(sender.tab.id)?.id}).catch(()=>{});
       return { enabled: true, prefs: value.prefs, modelConfigured: !!value.profile.endpoint && !!value.profile.model, translationSignature: await translationSignature(value), entries: (await store.listEntries(value.prefs.targetLanguage)).map(publicEntry) };
     }
     case 'SHIYI/PAGE_CACHE_LOAD': {
@@ -297,7 +305,7 @@ async function handle(message, sender) {
     }
     case 'SHIYI/OPEN_OPTIONS': {
       if (!trusted(sender)) await requireContent(sender);
-      const section = ['library', 'translation', 'model', 'summary', 'sites', 'data', 'help', 'about'].includes(message.section) ? message.section : 'library';
+      const section = ['library', 'trails','reviews','translation', 'model', 'summary', 'sites', 'data', 'help', 'about'].includes(message.section) ? message.section : 'library';
       const query = typeof message.entryId === 'string' ? `?entry=${encodeURIComponent(message.entryId.slice(0, 80))}` : '';
       await chrome.tabs.create({ url: chrome.runtime.getURL(`options.html${query}#${section}`) }); return {};
     }
@@ -339,6 +347,17 @@ async function handle(message, sender) {
     }
     case 'SHIYI/CLEAR_KEY': uiOnly(sender); abortRequests(); await settings.clearCredential(); await broadcast(); return {};
     case 'SHIYI/SUMMARY_START': uiOnly(sender); return summaries.start(message.tabId, message.preset);
+    case 'SHIYI/KNOWLEDGE_READY': await requireContent(sender); return knowledge.captureTab(sender.tab.id,{documentReady:true,visitToken:knowledgeNavigations.get(sender.tab.id)?.id});
+    case 'SHIYI/KNOWLEDGE_LIST': uiOnly(sender); return knowledge.list(message);
+    case 'SHIYI/KNOWLEDGE_DETAIL': uiOnly(sender); return knowledge.detail(boundedText(message.id,100,'记录标识'));
+    case 'SHIYI/KNOWLEDGE_REVIEW': uiOnly(sender); return knowledge.createReview(message);
+    case 'SHIYI/KNOWLEDGE_EDIT': uiOnly(sender); await knowledge.updateVisit(message.id,message);return {};
+    case 'SHIYI/KNOWLEDGE_DELETE': uiOnly(sender);await knowledge.remove(message.ids);return {};
+    case 'SHIYI/KNOWLEDGE_CLEAR': uiOnly(sender);return knowledge.clear(message.filter);
+    case 'SHIYI/KNOWLEDGE_RETRY': uiOnly(sender);await knowledge.retry(message.id);return {};
+    case 'SHIYI/KNOWLEDGE_RESUME': uiOnly(sender);await knowledge.resume();return {};
+    case 'SHIYI/KNOWLEDGE_EXPORT': uiOnly(sender);return knowledge.exportData(message.filter,message.originals===true);
+    case 'SHIYI/KNOWLEDGE_PREFS': uiOnly(sender);await settings.saveKnowledgePrefs(message.prefs);await knowledge.scheduleNext();await broadcast();return {};
     case 'SHIYI/SUMMARY_STOP': uiOnly(sender); summaries.stop(message.tabId); return {};
     case 'SHIYI/SAVE_SUMMARY_PREFS': uiOnly(sender); await settings.saveSummaryPrefs(message.prefs); await broadcast(); return {};
     case 'SHIYI/SAVE_SUMMARY_PROFILE': {
@@ -374,7 +393,7 @@ async function handle(message, sender) {
   }
 }
 chrome.runtime.onMessage.addListener((message, sender, respond) => {
-  if (!message?.type?.startsWith('SHIYI/') || message.type === 'SHIYI/UI_CHANGED') return false;
+  if (!message?.type?.startsWith('SHIYI/') || ['SHIYI/UI_CHANGED','SHIYI/KNOWLEDGE_CHANGED'].includes(message.type)) return false;
   let task;
   try {
     if (message.type === 'SHIYI/SUMMARY_OPEN') {
@@ -404,10 +423,18 @@ chrome.permissions.onRemoved.addListener(() => ready.then(async () => { abortReq
 chrome.permissions.onAdded.addListener(() => ready.then(async () => { await injectExisting(); await summaryPanels.syncAll(); await broadcast(); }).catch(() => {}));
 chrome.tabs.onActivated.addListener(({ tabId }) => ready.then(() => menus.update(tabId)).catch(() => {}));
 chrome.tabs.onUpdated.addListener((tabId, change, tab) => {
+  let navigation=knowledgeNavigations.get(tabId);
+  if(change.status==='loading'||change.url){if(!navigation||navigation.url!==tab.url||change.status==='loading'&&!navigation.loading){navigation={id:crypto.randomUUID(),url:tab.url,loading:true};knowledgeNavigations.set(tabId,navigation);}const token=navigation.id;ready.then(()=>knowledge.begin(tabId,{newVisit:true,tabSnapshot:tab,visitToken:token})).catch(()=>{});}
+  if(change.status==='complete'||change.url&&tab.status==='complete'){if(navigation)navigation.loading=false;const token=navigation?.id;ready.then(()=>knowledge.captureTab(tabId,{visitToken:token})).catch(()=>{});}
   if (change.status === 'loading') { abortRequests(item => item.tabId === tabId); setBadge(tabId, false).catch(() => {}); }
   if (tab.active && (change.status === 'complete' || change.url)) ready.then(() => menus.update(tabId)).catch(() => {});
 });
-chrome.tabs.onRemoved.addListener(tabId => { abortRequests(item => item.tabId === tabId); });
+chrome.alarms.onAlarm.addListener(alarm=>ready.then(()=>alarm.name==='dianyi-knowledge-daily'?knowledge.runDue():alarm.name==='dianyi-knowledge-queue'?knowledge.pump():undefined).catch(()=>{}));
+chrome.storage.onChanged.addListener((changes,area)=>{
+  const profileChanged=changes.config&&JSON.stringify(changes.config.oldValue?.modelConnections?.summary)!==JSON.stringify(changes.config.newValue?.modelConnections?.summary);
+  if(area==='local'&&(profileChanged||changes.summaryCredentials)||area==='session'&&changes.summaryCredentials)ready.then(()=>knowledge.resume()).catch(()=>{});
+});
+chrome.tabs.onRemoved.addListener(tabId => { abortRequests(item => item.tabId === tabId);knowledgeNavigations.delete(tabId); });
 chrome.runtime.onConnect.addListener(port => {
   if (port.name !== 'SHIYI_SUMMARY' || !trusted(port.sender) || new URL(port.sender.url).pathname !== '/summary.html') { port.disconnect(); return; }
   summaryPanels.connect(port);
