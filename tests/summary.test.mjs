@@ -73,7 +73,7 @@ test('same-host summary and translation credentials remain independent across sa
   assert.equal(await settings.getSummarySecret(profile),'');
   await settings.saveSummaryProfile({...profile,rememberKey:false},'summary-secret');
   assert.equal(await settings.getSecret(profile),'translation-secret');assert.equal(await settings.getSummarySecret(profile),'summary-secret');
-  assert(Object.keys(data.local.modelCredentials).length===1);assert(!data.local.summaryCredentials || !Object.keys(data.local.summaryCredentials).length);assert(Object.keys(data.session.summaryCredentials).length===1);
+  assert(Object.keys(data.local.modelLibraryCredentials).length===1);assert(Object.keys(data.session.modelLibraryCredentials).length===1);assert(!data.local.modelCredentials&&!data.local.summaryCredentials&&!data.session.summaryCredentials);
   await settings.clearSummaryCredential();assert.equal(await settings.getSecret(profile),'translation-secret');assert.equal(await settings.getSummarySecret(profile),'');
   delete globalThis.chrome;
 });

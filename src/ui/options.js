@@ -1,29 +1,25 @@
-import { LANGUAGES, STYLES, PROMPTS, DEFAULT_PROFILE, cleanPrefs, cleanProfile, pageOrigin, normalize, digest } from '../lib/core.js';
+import { LANGUAGES, STYLES, PROMPTS, DEFAULT_PROFILE, cleanPrefs, cleanProfile, pageOrigin, normalize, digest, VERSION } from '../lib/core.js';
 import { api, brand, downloadJSON, esc, icon, languageOptions, notify, requestHost } from './common.js';
 import { initialModelDraft, collectModelDraft, changeProvider, changeRegion, useRecommendedModel, updateModelGuidance, modelForm } from './model-setup.js';
 import { blacklistSite } from '../lib/site-policy.js';
 import { readingSettings, updateReadingColor, defaultReadingColor } from './reading-settings.js';
 import { SUMMARY_PRESETS, cleanSummaryProfile, summaryPresetProfile } from '../lib/summary-presets.js';
 import { enhanceIntroduction } from './intro.js';
-import { connectionManager } from './connections.js';
+import { modelLibrary, scenarioConnections } from './connections.js';
 import { mountKnowledge, knowledgePreferences, clearKnowledgeDrafts } from './knowledge.js';
 
 const app = document.getElementById('app'), modal = document.getElementById('modal');
-const sections = { library: ['library', '我的词句库'], trails:['globe','我的轨迹'], reviews:['book','阅读回顾'], translation: ['sliders', '翻译偏好'], model: ['cpu', '模型连接'], summary: ['spark', '总结设置'], sites: ['globe', '网站黑名单'], data: ['shield', '数据与隐私'], help: ['help', '使用指南'], about: ['book', '产品介绍'] };
+const sections = { library: ['library', '我的词句库'], trails:['globe','我的轨迹'], reviews:['book','阅读回顾'], translation: ['sliders', '翻译偏好'], model: ['cpu', '模型库'], summary: ['spark', '总结设置'], sites: ['globe', '网站黑名单'], data: ['shield', '数据与隐私'], help: ['help', '使用指南'], about: ['book', '产品介绍'] };
 const kinds = { word: '单词', phrase: '短语', sentence: '句子' };
 let state, entries = [], section = 'library', prefsDraft, query = '', filter = 'all', sort = 'new', page = 0, selected = new Set(), actionBusy = false, detailOpened = false, searchTimer;
 const pageSize = 50;
-let modelDraft, modelEditingId, testedConnection, introDispose, introAbort, knowledgeDispose;
+let modelDraft, modelEditingId, testedConnection, introDispose, introAbort, knowledgeDispose, modelFormOpen=false;
 const purpose = () => section === 'summary' ? 'summary' : 'translation';
-const modelBank = () => state.modelConnections?.[purpose()] || { defaultId: '', items: [] };
-const savedProfile = () => modelBank().items.find(item => item.id === modelEditingId)?.profile || { ...(purpose() === 'summary' ? summaryPresetProfile() : DEFAULT_PROFILE), connectionId: null, hasKey: false };
+const savedProfile = () => state.modelLibrary.items.find(item => item.id === modelEditingId)?.profile || { ...DEFAULT_PROFILE, connectionId: null, hasKey: false };
 function prepareModel() {
-  const bank = modelBank();
-  if (modelEditingId === undefined) modelEditingId = bank.defaultId || null;
-  modelDraft ||= initialModelDraft(savedProfile(), purpose());
+  if (modelEditingId === undefined) modelEditingId = null;
+  if(!modelDraft){modelDraft=initialModelDraft(savedProfile(), 'library');if(modelEditingId===null)modelDraft.rememberKey=true;}
   modelDraft.connectionId = modelEditingId;
-  modelDraft.isDefault = modelEditingId !== null && modelEditingId === bank.defaultId;
-  if (modelDraft.isDefault || !bank.items.length) modelDraft.makeDefault = true;
 }
 const date = time => new Date(time).toLocaleDateString('zh-CN', { year: 'numeric', month: '2-digit', day: '2-digit' });
 const heading = (eyebrow, title, text, actions = '') => `<div class="page-heading"><div><div class="eyebrow">${eyebrow}</div><h1>${title}</h1><p>${text}</p></div>${actions}</div>`;
@@ -33,20 +29,20 @@ function draw() {
   document.title = `点译 · ${sections[section][1]}`;
   app.className = 'app-shell';
   const connectionProfile=['trails','reviews','summary'].includes(section)?state.summaryProfile:state.profile;const connectionSection=['trails','reviews','summary'].includes(section)?'summary':'model';
-  app.innerHTML = `<aside class="sidebar" aria-label="主导航">${brand()}<p class="brand-caption">让遇见的词，留下来。</p><div class="nav-caption">我的阅读空间</div><nav>${Object.entries(sections).map(([key, [glyph, title]]) => `<a class="nav-item ${key === section ? 'active' : ''}" href="#${key}" aria-label="${title}" ${key === section ? 'aria-current="page"' : ''}>${icon(glyph)}<span>${title}</span>${key === 'library' ? `<span class="count" id="nav-count">${state.count}</span>` : ''}</a>`).join('')}</nav><div class="sidebar-foot">${icon('leaf')}<h3>从遇见，到记住。</h3><p>让释义回到文字身边，<br>让阅读回到自己的节奏。</p><div class="local-device">${icon('monitor')}本地阅读空间</div></div></aside><div class="workspace"><header class="topbar"><div class="breadcrumbs"><span class="muted">工作空间</span><span class="muted">/</span><span>${sections[section][1]}</span></div><div class="topbar-status">${connectionProfile.endpoint ? `<span class="tag green">${icon('cpu')}${esc(connectionProfile.name)}</span>` : `<a href="#${connectionSection}">连接${connectionSection==='summary'?'总结':'翻译'}模型 ↗</a>`}<span class="status-description">无需账号 · 本地词库</span></div></header><main id="main">${section === 'library' ? library() : ['trails','reviews'].includes(section)?'<div id="knowledge-root"></div>': section === 'translation' ? translation() : section === 'model' ? model() : section === 'summary' ? summarySettings() : section === 'sites' ? sites() : section === 'data' ? dataPage() : section === 'about' ? introduction() : help()}${footer()}</main></div>`;
+  app.innerHTML = `<aside class="sidebar" aria-label="主导航">${brand()}<p class="brand-caption">让遇见的词，留下来。</p><div class="nav-caption">我的阅读空间</div><nav>${Object.entries(sections).map(([key, [glyph, title]]) => `<a class="nav-item ${key === section ? 'active' : ''}" href="#${key}" aria-label="${title}" ${key === section ? 'aria-current="page"' : ''}>${icon(glyph)}<span>${title}</span>${key === 'library' ? `<span class="count" id="nav-count">${state.count}</span>` : ''}</a>`).join('')}</nav><div class="sidebar-foot">${icon('leaf')}<h3>从遇见，到记住。</h3><p>让释义回到文字身边，<br>让阅读回到自己的节奏。</p><div class="local-device">${icon('monitor')}本地阅读空间</div></div></aside><div class="workspace"><header class="topbar"><div class="breadcrumbs"><span class="muted">工作空间</span><span class="muted">/</span><span>${sections[section][1]}</span></div><div class="topbar-status">${connectionProfile.endpoint ? `<span class="tag green">${icon('cpu')}${esc(connectionProfile.name)}</span>` : `<a href="#${connectionSection}">连接${connectionSection==='summary'?'总结':'翻译'}模型 ↗</a>`}<span class="status-description">无需账号 · 本地词库</span></div></header><main id="main">${section === 'library' ? library() : ['trails','reviews'].includes(section)?'<div id="knowledge-root"></div>': section === 'translation' ? translation() : section === 'model' ? model() : section === 'summary' ? summarySettings() : section === 'sites' ? sites() : section === 'data' ? dataPage() : section === 'about' ? introduction() : help()}<input type="file" id="vocabulary-file" accept="application/json,.json" aria-label="选择词库备份文件" hidden>${footer()}</main></div>`;
   if (section === 'library') renderTable();
   if(['trails','reviews'].includes(section))knowledgeDispose=mountKnowledge(document.getElementById('knowledge-root'),{type:section});
-  if(section==='summary')document.getElementById('main').insertAdjacentHTML('beforeend',knowledgePreferences(state.knowledgePrefs));
+  if(section==='summary')document.querySelector('#main .work-footer').insertAdjacentHTML('beforebegin',knowledgePreferences(state.knowledgePrefs));
   document.getElementById('main').classList.toggle('intro-main', section === 'about');
   if (section === 'about') mountIntroduction();
   if ((section === 'model' || section === 'summary') && document.getElementById('model-key')) document.getElementById('model-key').value = modelDraft.apiKey || '';
 }
 async function refreshData() {
-  const [nextState, library] = await Promise.all([api('UI_STATE'), api('LIBRARY')]); state = nextState; entries = library.entries;
+  const [nextState, library] = await Promise.all([api('UI_STATE'), api('LIBRARY')]);if(nextState.version!==VERSION)throw Object.assign(new Error('安装文件已更新，请重新加载点译完成升级。本地词库会保留。'),{code:'UPGRADE_REQUIRED'});state = nextState; entries = library.entries;
 }
 async function route() {
   const route = location.hash.slice(1); section = Object.hasOwn(sections, route) ? route : 'library';
-  selected.clear(); prefsDraft = null; modelDraft = null; modelEditingId = undefined; testedConnection = null; draw(); window.scrollTo({ top: 0, behavior: 'instant' });
+  selected.clear(); prefsDraft = null; modelDraft = null; modelEditingId = undefined; testedConnection = null; modelFormOpen=false; draw(); window.scrollTo({ top: 0, behavior: 'instant' });
   const id = new URLSearchParams(location.search).get('entry');
   if (section === 'library' && id && !detailOpened) { detailOpened = true; const entry = entries.find(entry => entry.id === id); if (entry) showDetail(entry); }
 }
@@ -86,7 +82,7 @@ async function mountIntroduction() {
 function note(glyph, title, text, secondaryTitle = '', secondaryText = '') { return `<div class="aside-note">${icon(glyph)}<h3>${title}</h3><p>${text}</p></div>${secondaryTitle ? `<div class="aside-mini"><h3>${secondaryTitle}</h3><p>${secondaryText}</p><a class="link-btn" href="#help">查看使用指南 ${icon('up')}</a></div>` : ''}`; }
 function library() {
   const domains = new Set(entries.map(entry => entry.source?.domain).filter(Boolean));
-  return heading('YOUR PERSONAL GLOSSARY', '每一次遇见，都在这里。', `已收藏 ${entries.length} 个词句，${domains.size} 个来源网站。下一次阅读，接着理解。`, `<button class="btn" data-action="export">${icon('download')}导出词库</button>`)
+  return heading('YOUR PERSONAL GLOSSARY', '每一次遇见，都在这里。', `已收藏 ${entries.length} 个词句，${domains.size} 个来源网站。下一次阅读，接着理解。`, `<button class="btn" data-action="export">${icon('download')}导出词库</button><button class="btn" data-action="import-vocabulary">${icon('book')}恢复词库</button>`)
     + `<div class="library-toolbar"><label class="search-field" for="term-search">${icon('search')}<input type="search" id="term-search" placeholder="搜索词句或释义" aria-label="搜索词句或释义" value="${esc(query)}"></label><span class="tag">${icon('monitor')}仅保存在此浏览器</span></div><div class="filter-sort"><div class="filter-tabs" role="group" aria-label="词句类型">${[['all', '全部词句'], ...Object.entries(kinds)].map(([key, name]) => `<button data-filter="${key}" class="${filter === key ? 'active' : ''}" aria-pressed="${filter === key}">${name}<small>${key === 'all' ? entries.length : entries.filter(entry => entry.kind === key).length}</small></button>`).join('')}</div><label class="sr-only" for="sort">排序方式</label><select class="sort-select" id="sort"><option value="new" ${sort === 'new' ? 'selected' : ''}>最近收藏优先</option><option value="alpha" ${sort === 'alpha' ? 'selected' : ''}>按字母排序</option></select></div><div id="batch"></div><section class="table-card" id="table" aria-label="词句列表"></section>`;
 }
 function filteredEntries() {
@@ -113,15 +109,15 @@ function translation() {
     note('leaf', '表达可以变，意思要准确。', '无论选择哪种风格，译文都应忠实于原文。专业术语不随意改写，幽默也不喧宾夺主。', '已收藏的释义不会被覆盖', '修改语言、模型或提示词不会自动重译旧词。已有释义可以在词句库中手动编辑。'));
 }
 function model() {
-  prepareModel();
-  return heading('YOUR MODELS. YOUR CHOICE.', '选好默认，备好连接。', '保存多个模型或 Key，按需设置默认与备用。') + layout(
-    connectionManager(modelBank(), purpose(), modelEditingId) + modelForm(modelDraft, savedProfile()),
-    note('spark', '两步就好。', '选择 DeepSeek、通义千问或 OpenAI，粘贴自己的 API Key，点击“连接并保存”。验证成功后即可在普通网页直接划词翻译。', '需要更多选择？', '其他厂家、企业网关和本地模型可使用自定义服务。本机 Codex 可复用已有登录，首次安装本机助手即可。'));
+  if(!state.modelLibrary.items.length)modelFormOpen=true;
+  if(modelFormOpen)prepareModel();
+  return `<div class="page-heading"><div><h1>模型库</h1><p>添加一次，本地保存。不同场景直接选择使用。</p></div></div>`+layout(
+    modelLibrary(state, modelEditingId)+(modelFormOpen?`<div class="model-editor"><div class="model-editor-heading"><h2>${modelEditingId?'编辑模型':'添加模型'}</h2><button class="btn subtle small" data-action="close-model-editor">收起</button></div><p class="field-help">修改已保存的连接会同步到所有引用它的场景。</p>${modelForm(modelDraft,savedProfile())}</div>`:'')+scenarioConnections(state,'translation'),
+    note('cpu','连接留在本地。','地址、型号和 Key 统一保存。勾选长期记住后，浏览器重启也可直接使用；也可只保留本次会话。','按场景选模型','翻译在此选择默认和备用；网页总结与周期回顾在“总结设置”直接选择已保存模型，无需再填 Key。'));
 }
 function summarySettings() {
-  prepareModel();
-  return `<div class="page-heading"><div><h1>总结设置</h1><p>为网页归纳与分析单独连接模型，翻译继续使用原来的配置。</p></div></div>` + layout(
-    connectionManager(modelBank(), purpose(), modelEditingId) + modelForm(modelDraft, savedProfile()) + `<section class="card"><div class="section-title">${icon('spark')}<h2>总结场景与提示词</h2></div><p class="section-description">自动模式先识别主题，再应用相应预设。只分析当前网页，不进行额外联网检索。</p><form id="summary-preferences"><label class="form-label" for="default-summary-preset">默认总结方式</label><select class="input" id="default-summary-preset">${Object.entries(SUMMARY_PRESETS).map(([key, value]) => `<option value="${key}" ${state.summaryPrefs.preset === key ? 'selected' : ''}>${value.name}</option>`).join('')}</select><div class="summary-prompts">${Object.entries(SUMMARY_PRESETS).filter(([key]) => key !== 'auto').map(([key, value]) => `<details><summary>${value.name}</summary><label class="sr-only" for="prompt-${key}">${value.name}提示词</label><textarea class="input" id="prompt-${key}" data-summary-prompt="${key}" maxlength="6000" rows="5">${esc(state.summaryPrefs.prompts?.[key] || value.prompt)}</textarea><button type="button" class="link-btn" data-reset-summary-prompt="${key}">恢复预设</button></details>`).join('')}</div><p class="field-help">每个提示词最多 6000 字符。保存后应用于下一次总结，不自动重跑已有结果。</p><button class="btn primary" type="submit">保存总结偏好</button></form></section><section class="card"><h2>总结密钥</h2><p>清除此用途的全部主用与备用 Key；翻译连接仍可继续使用。本机 Codex 登录由 Codex 自己管理。</p><button class="btn small" data-action="clear-summary-key">清除全部总结 Key</button></section>`,
+  return `<div class="page-heading"><div><h1>总结设置</h1><p>从模型库选择总结模型，再设置场景、提示词与回顾计划。</p></div></div>` + layout(
+    scenarioConnections(state, 'summary') + `<section class="card"><div class="section-title">${icon('spark')}<h2>总结场景与提示词</h2></div><p class="section-description">自动模式先识别主题，再应用相应预设。只分析当前网页，不进行额外联网检索。</p><form id="summary-preferences"><label class="form-label" for="default-summary-preset">默认总结方式</label><select class="input" id="default-summary-preset">${Object.entries(SUMMARY_PRESETS).map(([key, value]) => `<option value="${key}" ${state.summaryPrefs.preset === key ? 'selected' : ''}>${value.name}</option>`).join('')}</select><div class="summary-prompts">${Object.entries(SUMMARY_PRESETS).filter(([key]) => key !== 'auto').map(([key, value]) => `<details><summary>${value.name}</summary><label class="sr-only" for="prompt-${key}">${value.name}提示词</label><textarea class="input" id="prompt-${key}" data-summary-prompt="${key}" maxlength="6000" rows="5">${esc(state.summaryPrefs.prompts?.[key] || value.prompt)}</textarea><button type="button" class="link-btn" data-reset-summary-prompt="${key}">恢复预设</button></details>`).join('')}</div><p class="field-help">每个提示词最多 6000 字符。保存后应用于下一次总结，不自动重跑已有结果。</p><button class="btn primary" type="submit">保存总结偏好</button></form></section>`,
     note('book', '侧栏专心展示总结。', '网页在后台自动归纳并存入轨迹。点击弹窗最上方“查看本页总结”或网页右键打开侧栏，直接读取已有结果。侧栏可停止、复制、导出，拖动浏览器分隔线即可调宽。', '选择通用对话模型', '默认推荐 qwen-flash。qwen-mt-* 专用翻译模型不支持总结。生成内容按网页资料归纳，仍需自行核对关键结论。'));
 }
 function sites() {
@@ -135,12 +131,12 @@ function pageCacheCard() {
 }
 function dataPage() {
   return heading('YOUR WORDS, STAY YOURS.', '你的积累，由你保管。', '无需账号。词库保存在此浏览器，可以随时导出带走。') + layout(
-    `<section class="card"><div class="section-title">${icon('library')}<h2>本地词句库。</h2></div><div class="data-stat"><div class="data-icon">${icon('library')}</div><div><strong>${state.count} <span style="font-size:13px">个词句</span></strong><p>${new Set(entries.map(entry => entry.source?.domain).filter(Boolean)).size} 个来源网站 · 本地保存</p></div></div><div class="data-actions"><button class="btn" data-action="export">${icon('download')}导出词库 JSON</button><button class="btn danger" data-action="clear-library" ${state.count ? '' : 'disabled'}>${icon('trash')}清空本地词库</button></div><p class="field-help" style="margin-top:16px">卸载扩展、清除扩展数据前，请先导出备份。当前版本提供导出，暂不支持导入或跨设备同步。</p></section>${pageCacheCard()}<section class="card"><h2>阅读轨迹与回顾</h2><p class="section-description">长期保存在本地，独立于可淘汰的页面译文缓存。清理前请先导出需要保留的知识。</p><div class="data-actions"><a class="btn" href="#trails">查看或导出轨迹</a><a class="btn" href="#reviews">查看阅读回顾</a><button class="btn danger" data-action="clear-knowledge">清空轨迹与回顾</button></div></section><section class="card"><div class="section-title">${icon('shield')}<h2>只发送当前任务需要的内容。</h2></div><ul class="privacy-list"><li>${icon('check')}<div>只发送你确认翻译的文本。<small>划词只发送选区和可选语境；按段发送完整段落；点击整页翻译后分块发送当前页面可读文字。网页总结会自动读取已加载的主要可见正文，结合少量相关阅读摘要与备注，保存在本地轨迹中；周期回顾使用已保存摘要。输入值、编辑内容和 Cookie 不进入请求。</small></div></li><li>${icon('check')}<div>自动标记直接读取本地词库。<small>再次遇见同词时复用已存释义，不自动请求模型。</small></div></li><li>${icon('check')}<div>密钥与词库分开保存。<small>默认会话保存；网页脚本无法读取。导出文件不包含 API Key、服务请求头或连接凭据。</small></div></li></ul><button class="btn small" data-action="clear-key">${icon('lock')}清除全部翻译 Key</button></section>`,
+    `<section class="card"><div class="section-title">${icon('library')}<h2>本地词句库。</h2></div><div class="data-stat"><div class="data-icon">${icon('library')}</div><div><strong>${state.count} <span style="font-size:13px">个词句</span></strong><p>${new Set(entries.map(entry => entry.source?.domain).filter(Boolean)).size} 个来源网站 · 本地保存</p></div></div><div class="data-actions"><button class="btn" data-action="export">${icon('download')}导出词库 JSON</button><button class="btn" data-action="import-vocabulary">恢复词库 JSON</button><button class="btn danger" data-action="clear-library" ${state.count ? '' : 'disabled'}>${icon('trash')}清空本地词库</button></div><p class="field-help" style="margin-top:16px">卸载扩展、清除扩展数据前，请先导出备份。词库由本地数据库持久保存，并自动更新本机副本；同一安装目录覆盖升级会保留。更换目录或卸载前请导出 JSON，之后可合并恢复，已有释义不被覆盖。</p><p class="field-help" role="status">${state.vocabularyBackup?.error?esc(state.vocabularyBackup.error):`本地自动副本：${state.vocabularyBackup?.count||0} 个词句${state.vocabularyBackup?.updatedAt?` · ${date(state.vocabularyBackup.updatedAt)} 更新`:""}`}</p><button class="btn small subtle" data-action="backup-vocabulary">更新本地副本</button></section>${pageCacheCard()}<section class="card"><h2>阅读轨迹与回顾</h2><p class="section-description">长期保存在本地，独立于可淘汰的页面译文缓存。清理前请先导出需要保留的知识。</p><div class="data-actions"><a class="btn" href="#trails">查看或导出轨迹</a><a class="btn" href="#reviews">查看阅读回顾</a><button class="btn danger" data-action="clear-knowledge">清空轨迹与回顾</button></div></section><section class="card"><div class="section-title">${icon('shield')}<h2>只发送当前任务需要的内容。</h2></div><ul class="privacy-list"><li>${icon('check')}<div>只发送你确认翻译的文本。<small>划词只发送选区和可选语境；按段发送完整段落；点击整页翻译后分块发送当前页面可读文字。网页总结会自动读取已加载的主要可见正文，结合少量相关阅读摘要与备注，保存在本地轨迹中；周期回顾使用已保存摘要。输入值、编辑内容和 Cookie 不进入请求。</small></div></li><li>${icon('check')}<div>自动标记直接读取本地词库。<small>再次遇见同词时复用已存释义，不自动请求模型。</small></div></li><li>${icon('check')}<div>密钥与词库分开保存。<small>模型库统一保存；网页脚本无法读取。导出文件不包含 API Key、服务请求头或连接凭据。</small></div></li></ul><button class="btn small" data-action="clear-model-keys">${icon('lock')}清除模型库全部 Key</button></section>`,
     note('lock', '留在本地，也请记得备份。', '词库没有上传到点译服务器。扩展更新会保留数据；卸载可能删除扩展存储，建议提前导出。', '已存释义的边界', '同词在不同语境可能含义不同。悬浮卡片明确显示“已存释义”，可在词库中编辑；当前版本不自动判断多个义项。'));
 }
 function help() {
   return heading('A LITTLE HELP. A BETTER READ.', '从一次划词开始。', '连接模型后即可在普通网页划词，也可右键翻译选区或整页。') + layout(
-    `<section class="card"><div class="section-title">${icon('book')}<h2>开始阅读。</h2></div><ol class="help-steps"><li><div><strong>连接你自己的模型</strong><p>在“模型连接”中选择厂家，填入 API Key 后点击“连接并保存”；可保存多个 Key，指定默认和备用。也可选择“本机 Codex”，按指引复用本机登录。</p><a class="link-btn" href="#model">打开模型连接 ${icon('arrow')}</a></div></li><li><div><strong>打开网页即可使用</strong><p>普通网页默认开启，无需逐站授权或添加白名单。需要停用时，在插件浮窗或右键菜单关闭此网站，加入黑名单。</p></div></li><li><div><strong>选中文字，点击目标语言翻译</strong><p>胶囊只显示“中文”等目标语言；点击语言即翻译，下拉切换并记住语言，更多中设置语境。短选区成功后自动保存；长选区或跨块选区按完整段落对照，不添加下划线或括号。选区最多 16000 字符。</p></div></li><li><div><strong>回到文字身边，随时查看与修改</strong><p>短词悬浮查看释义，可编辑或删除。长文可点击插件菜单“翻译当前页面”，选择双语对照或仅译文；右下角控制条支持切换、停止、继续、重试与恢复原文。</p></div></li></ol></section><section class="card"><div class="section-title">${icon('help')}<h2>常见问题。</h2></div><ul class="privacy-list"><li>${icon('arrow')}<div>为什么新网站没有下划线？<small>确认网站不在黑名单中，且词库已有当前目标语言对应的词句。浏览器扩展详情中的网站访问权限需允许。</small></div></li><li>${icon('arrow')}<div>重新打开浏览器后需要填写密钥？<small>会话密钥默认不跨浏览器重启保存；需要时可以明确勾选“在此浏览器长期记住密钥”。</small></div></li><li>${icon('arrow')}<div>哪些页面暂不支持？<small>浏览器内部页、扩展商店、内置 PDF、图片和 Canvas 文字；iframe 和 Shadow DOM 组件内的内容。代码、输入值与可编辑内容保留。整页翻译覆盖正文、导航及控件标签。</small></div></li><li>${icon('arrow')}<div>如何安装或升级？<small>把安装包解压，在 Chrome / Edge 的扩展管理页打开开发者模式，选择“加载已解压的扩展”，选择包含 manifest.json 的文件夹。升级时保留原文件夹并在扩展页重新加载；不要卸载重装。</small></div></li></ul></section>`,
+    `<section class="card"><div class="section-title">${icon('book')}<h2>开始阅读。</h2></div><ol class="help-steps"><li><div><strong>连接你自己的模型</strong><p>在“模型库”中选择厂家，填入 API Key 后点击“连接并保存”；可保存多个 Key，指定默认和备用。也可选择“本机 Codex”，按指引复用本机登录。</p><a class="link-btn" href="#model">打开模型库 ${icon('arrow')}</a></div></li><li><div><strong>打开网页即可使用</strong><p>普通网页默认开启，无需逐站授权或添加白名单。需要停用时，在插件浮窗或右键菜单关闭此网站，加入黑名单。</p></div></li><li><div><strong>选中文字，点击目标语言翻译</strong><p>胶囊只显示“中文”等目标语言；点击语言即翻译，下拉切换并记住语言，更多中设置语境。短选区成功后自动保存；长选区或跨块选区按完整段落对照，不添加下划线或括号。选区最多 16000 字符。</p></div></li><li><div><strong>回到文字身边，随时查看与修改</strong><p>短词悬浮查看释义，可编辑或删除。长文可点击插件菜单“翻译当前页面”，选择双语对照或仅译文；右下角控制条支持切换、停止、继续、重试与恢复原文。</p></div></li></ol></section><section class="card"><div class="section-title">${icon('help')}<h2>常见问题。</h2></div><ul class="privacy-list"><li>${icon('arrow')}<div>为什么新网站没有下划线？<small>确认网站不在黑名单中，且词库已有当前目标语言对应的词句。浏览器扩展详情中的网站访问权限需允许。</small></div></li><li>${icon('arrow')}<div>重新打开浏览器后需要填写密钥？<small>只保留本次会话的密钥不会跨浏览器重启；可勾选“在此浏览器长期记住密钥”。</small></div></li><li>${icon('arrow')}<div>哪些页面暂不支持？<small>浏览器内部页、扩展商店、内置 PDF、图片和 Canvas 文字；iframe 和 Shadow DOM 组件内的内容。代码、输入值与可编辑内容保留。整页翻译覆盖正文、导航及控件标签。</small></div></li><li>${icon('arrow')}<div>如何安装或升级？<small>把安装包解压，在 Chrome / Edge 的扩展管理页打开开发者模式，选择“加载已解压的扩展”，选择包含 manifest.json 的文件夹。升级时保留原文件夹并在扩展页重新加载；不要卸载重装。</small></div></li></ul></section>`,
     note('leaf', '不打断，是最好的陪伴。', '选区翻译由点击语言、按段或整页入口发起。网页自动总结独立在后台运行，可在轨迹查看，黑名单网站不处理。整页模式期间暂停下划线和括号，普通复制不计入词库。', '遇到无法连接？', '核对地址、模型名称、密钥与额度；服务必须兼容 Chat Completions。没有共享账户或内置付费模型。'));
 }
 function collectPrefs() {
@@ -163,7 +159,7 @@ async function connectModel(save) {
   const form = document.getElementById('model-form');
   if (!form.reportValidity()) return;
   const profile = readProfile(), apiKey = modelDraft.apiKey, requestedPurpose = purpose(), editingId = modelEditingId;
-  const makeDefault = modelDraft.makeDefault === true, requestedSection = section;
+  const requestedSection = section;
   const current = () => form.isConnected && section === requestedSection && modelEditingId === editingId;
   const result = form.querySelector('#connection-result'), controls = form.querySelector('#model-controls');
   result.classList.remove('error'); result.textContent = '正在验证连接…'; controls.disabled = true;
@@ -179,13 +175,13 @@ async function connectModel(save) {
     if (!current()) return;
     testedConnection = verified;
     if (save) {
-      const saved = await api(requestedPurpose === 'summary' ? 'SAVE_SUMMARY_PROFILE' : 'SAVE_PROFILE', { profile, apiKey, connectionId: editingId, makeDefault });
+      const saved = await api('MODEL_LIBRARY_SAVE', { profile, apiKey, connectionId: editingId });
       if (!current()) { await refreshData(); notify(`${requestedPurpose === 'summary' ? '总结' : '翻译'}连接已保存`); return; }
       modelEditingId = saved.id; modelDraft = null; testedConnection = null;
       await refreshData(); if (section !== requestedSection) return; draw();
       const savedResult = document.getElementById('connection-result');
       if (savedResult) savedResult.innerHTML = `<strong>${icon('check')} 已连接并保存</strong><span>${requestedPurpose === 'summary' ? '流式测试：' : 'curiosity → '}${esc(verified.translation)}</span>`;
-      notify(requestedPurpose === 'summary' ? '总结模型已保存，后台任务会继续处理；侧栏可查看已有结果' : '模型连接已保存；可开始翻译');
+      notify('模型已保存到本地，可在翻译和总结场景直接选择');
     } else {
       result.innerHTML = `<strong>${icon('check')} 连接成功 · ${(verified.elapsedMs / 1000).toFixed(2)} 秒</strong><span>${requestedPurpose === 'summary' ? '流式测试：' : 'curiosity → '}${esc(verified.translation)}</span><p class="field-help">点击“连接并保存”即可开始使用。</p>`;
     }
@@ -208,14 +204,12 @@ async function busy(button, work) {
   try { await work(); } catch (error) { notify(error.message); }
   finally { actionBusy = false; if (button?.isConnected) button.disabled = false; }
 }
-async function changeConnection(id, action, enabled) {
-  const requestedSection = section;
-  await api('CONNECTION_UPDATE', { purpose: purpose(), id, action, enabled });
-  if (section !== requestedSection) { await refreshData(); return; }
-  if (action === 'default') modelEditingId = id;
-  if (action === 'delete' && modelEditingId === id) modelEditingId = undefined;
-  await refreshData(); modelDraft = null; testedConnection = null; if (modal.open) modal.close(); draw();
-  notify(action === 'default' ? '默认模型已更新；新请求优先使用此连接，已存释义保留' : action === 'delete' ? '连接及此连接的 Key 已移除' : '备用顺序已更新');
+async function updateScene(purpose,id,{action,enabled,makeDefault=true}={}) {
+  const requested=section,form=document.getElementById('model-form');
+  if(form)modelDraft=collectModelDraft(form,modelDraft);
+  if(action)await api('CONNECTION_UPDATE',{purpose,id,action,enabled});
+  else await api('MODEL_ASSIGN',{purpose,id,makeDefault});
+  await refreshData();if(section===requested)draw();notify('场景模型已更新，直接复用已保存的连接与 Key');
 }
 async function checkCodex() {
   const status = document.getElementById('codex-status'), form = status.closest('form'), draft = modelDraft;
@@ -249,13 +243,14 @@ document.addEventListener('submit', event => {
 });
 document.addEventListener('click', event => {
   const button = event.target.closest('button'); if (!button) return;
-  if (button.dataset.editConnection) { if (actionBusy) return; modelEditingId = button.dataset.editConnection; modelDraft = null; testedConnection = null; draw(); document.getElementById('model-name')?.focus(); return; }
-  if (button.dataset.connectionAction) { busy(button, () => changeConnection(button.dataset.connectionId, button.dataset.connectionAction)); return; }
-  if (button.dataset.removeConnection) {
-    const item = modelBank().items.find(item => item.id === button.dataset.removeConnection); if (!item) return;
-    openModal('移除这个连接？', `<p>将移除「${esc(item.profile.name)}」及此连接的 Key。词库和其他连接保留；如需恢复，需要重新添加。</p>`, `<button class="btn subtle" data-action="close-modal">取消</button><button class="btn danger" data-confirm-remove-connection="${esc(item.id)}">移除连接</button>`); return;
+  if(button.dataset.sceneAction){busy(button,()=>updateScene(button.dataset.purpose,button.dataset.connectionId,{action:button.dataset.sceneAction}));return;}
+  if(button.dataset.libraryDelete){
+    const item=state.modelLibrary.items.find(item=>item.id===button.dataset.libraryDelete);if(!item)return;
+    const uses=['translation','summary'].filter(p=>state.modelConnections[p].items.some(i=>i.id===item.id)).map(p=>p==='translation'?'翻译':'总结与回顾');
+    openModal('删除保存的模型？',`<p>将删除「${esc(item.profile.name)}」及其 Key。${uses.length?`当前用于${uses.join('、')}；默认场景会改用已选备用，没有备用时需要重新选择模型。`:'其他模型和本地资料保留。'}</p>`,`<button class="btn subtle" data-action="close-modal">取消</button><button class="btn danger" data-confirm-library-delete="${esc(item.id)}">删除模型</button>`);return;
   }
-  if (button.dataset.confirmRemoveConnection) { busy(button, () => changeConnection(button.dataset.confirmRemoveConnection, 'delete')); return; }
+  if(button.dataset.confirmLibraryDelete){busy(button,async()=>{await api('MODEL_LIBRARY_DELETE',{id:button.dataset.confirmLibraryDelete});modelDraft=null;modelEditingId=undefined;modelFormOpen=false;modal.close();await refreshData();draw();notify('模型及其 Key 已从本地模型库移除');});return;}
+  if (button.dataset.editConnection) { if (actionBusy) return; modelFormOpen=true; modelEditingId = button.dataset.editConnection; modelDraft = null; testedConnection = null; draw(); document.getElementById('model-name')?.focus(); return; }
   if (button.dataset.resetSummaryPrompt) { const key = button.dataset.resetSummaryPrompt; document.getElementById(`prompt-${key}`).value = SUMMARY_PRESETS[key].prompt; return; }
   if (button.dataset.colorChoice) { updateReadingColor(document.getElementById('preferences-form'), button.dataset.colorTheme, button.dataset.colorChoice); return; }
   if (button.dataset.resetColor) { updateReadingColor(document.getElementById('preferences-form'), button.dataset.resetColor, defaultReadingColor(button.dataset.resetColor)); return; }
@@ -273,7 +268,8 @@ document.addEventListener('click', event => {
   }); return; }
   if (button.dataset.siteRemove) { busy(button, async () => { await api('BLACKLIST_SET', { site: button.dataset.siteRemove, blocked: false }); await refreshData(); draw(); notify('已移出黑名单，恢复使用'); }); return; }
   switch (button.dataset.action) {
-    case 'new-connection': if (!actionBusy) { modelEditingId = null; modelDraft = null; testedConnection = null; draw(); document.getElementById('model-name')?.focus(); } break;
+    case 'new-connection': if (!actionBusy) { modelFormOpen=true; modelEditingId = null; modelDraft = null; testedConnection = null; draw(); document.getElementById('model-name')?.focus(); } break;
+    case 'close-model-editor': modelFormOpen=false;modelDraft=null;modelEditingId=undefined;testedConnection=null;draw();break;
     case 'codex-status': busy(button, checkCodex); break;
     case 'copy-codex-install': busy(button, async () => { await navigator.clipboard.writeText(`python3 install.py --extension-id ${chrome.runtime.id}`); notify('安装命令已复制，请在安装包的 native-host 文件夹中运行'); }); break;
     case 'close-modal': modal.close(); break;
@@ -288,6 +284,10 @@ document.addEventListener('click', event => {
     case 'clear-page-cache': busy(button, async () => { await api('CLEAR_PAGE_CACHE'); await refreshData(); draw(); notify('页面暂存已清除'); }); break;
     case 'clear-knowledge': openModal('清空阅读轨迹与回顾？','<p>将删除本地所有访问记录、原文快照、总结和依赖关系，包括已加入黑名单的历史资料。此操作不可撤销，请先导出备份。</p>','<button class="btn subtle" data-action="close-modal">取消</button><button class="btn danger" data-action="confirm-clear-knowledge">确认清空</button>');break;
     case 'confirm-clear-knowledge': busy(button,async()=>{await api('KNOWLEDGE_CLEAR');clearKnowledgeDrafts();modal.close();await refreshData();draw();notify('阅读轨迹与回顾已清空');});break;
+    case 'import-vocabulary':document.getElementById('vocabulary-file').click();break;
+    case 'backup-vocabulary':busy(button,async()=>{await api('VOCABULARY_BACKUP');await refreshData();draw();notify('词库本地副本已更新');});break;
+    case 'clear-model-keys':openModal('清除模型库全部 Key？','<p>将清除所有已保存连接的 Key，引用这些连接的翻译、总结与回顾都会受到影响。模型配置、词库和阅读资料保留。</p>','<button class="btn subtle" data-action="close-modal">取消</button><button class="btn danger" data-action="confirm-clear-model-keys">清除所有 Key</button>');break;
+    case 'confirm-clear-model-keys':busy(button,async()=>{await api('CLEAR_MODEL_KEYS');await refreshData();modal.close();draw();notify('模型库全部 Key 已清除');});break;
     case 'clear-key': busy(button, async () => { await api('CLEAR_KEY'); await refreshData(); draw(); notify('已清除密钥，词句库与模型地址仍保留'); }); break;
     case 'clear-summary-key': busy(button, async () => { await api('CLEAR_SUMMARY_KEY'); await refreshData(); modelDraft = null; draw(); notify('总结密钥已清除'); }); break;
     case 'toggle-key': { const field = document.getElementById('model-key'); field.type = field.type === 'password' ? 'text' : 'password'; break; }
@@ -303,7 +303,10 @@ document.addEventListener('input', event => {
 });
 document.addEventListener('change', event => {
   const input = event.target;
-  if (input.dataset.connectionBackup) { busy(input, () => changeConnection(input.dataset.connectionBackup, 'backup', input.checked)); return; }
+  if(input.id==='vocabulary-file'){const file=input.files?.[0];input.value='';if(file)busy(null,async()=>{if(file.size>16*1024*1024)throw Error('词库文件超过 16 MB，请分批恢复。');let data;try{data=JSON.parse(await file.text());}catch{throw Error('文件不是有效的词库 JSON，请选择点译导出的备份。');}const result=await api('VOCABULARY_IMPORT',{data});await refreshData();draw();notify(`已恢复 ${result.added} 个词句，保留 ${result.skipped} 个已有词句`);});return;}
+  if(input.dataset.sceneDefault){busy(input,()=>updateScene(input.dataset.sceneDefault,input.value));return;}
+  if(input.dataset.sceneAdd&&input.value){busy(input,()=>updateScene(input.dataset.sceneAdd,input.value,{makeDefault:false}));return;}
+  if(input.dataset.sceneBackup){busy(input,()=>updateScene(input.dataset.sceneBackup,input.dataset.connectionId,{action:'backup',enabled:input.checked}));return;}
   if (input.id === 'sort') { sort = input.value; page = 0; renderTable(); }
   if (input.id === 'custom-style') { prefsDraft = collectPrefs(); prefsDraft.style = input.checked ? 'custom' : 'regular'; draw(); }
   if (input.id === 'auth-type') { const key = document.getElementById('model-key'); key.disabled = input.value === 'none'; key.required = input.value !== 'none' && !savedProfile().hasKey; }
@@ -327,4 +330,4 @@ chrome.runtime.onMessage.addListener(message => {
     }
   }).catch(() => {});
 });
-refreshData().then(route).catch(error => { app.innerHTML = `<div class="empty"><h3>暂时无法打开阅读空间。</h3><p>${esc(error.message)}</p><button class="btn primary" id="retry">重试</button></div>`; document.getElementById('retry').onclick = () => location.reload(); });
+refreshData().then(route).catch(error => { app.innerHTML = `<div class="empty"><h3>${error.code==='UPGRADE_REQUIRED'?'完成本次升级':'暂时无法打开阅读空间。'}</h3><p>${esc(error.message)}</p><button class="btn primary" id="retry">${error.code==='UPGRADE_REQUIRED'?'打开扩展管理':'重试'}</button></div>`; document.getElementById('retry').onclick = () => error.code==='UPGRADE_REQUIRED'?chrome.tabs.create({url:'chrome://extensions/'}):location.reload(); });

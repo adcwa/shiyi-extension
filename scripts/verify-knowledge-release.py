@@ -14,12 +14,13 @@ VERSION = json.loads((ROOT/'package.json').read_text())['version']
 RELEASES, OUT = ROOT/'releases', ROOT/'verification'
 RELEASE, ARCHIVE = RELEASES/f'dianyi-{VERSION}', RELEASES/f'dianyi-chrome-edge-{VERSION}.zip'
 sha = lambda data: hashlib.sha256(data).hexdigest()
-names = ['unit', 'knowledge', 'knowledge-native', 'knowledge-browser-code']
+names = ['unit', 'knowledge', 'knowledge-native', 'knowledge-browser-code', 'shared-models']
 reports = {name: json.loads((OUT/f'{name}-{VERSION}.json').read_text()) for name in names}
 for name, report in reports.items():
     assert report['version'] == VERSION and report['result'] == 'pass', name
-assert reports['unit']['passed'] >= 151 and reports['unit']['failed'] == 0
+assert reports['unit']['passed'] >= 164 and reports['unit']['failed'] == 0
 assert len(reports['knowledge']['checks']) == 15 and len(reports['knowledge-native']['checks']) == 11
+assert len(reports['shared-models']['checks']) == 14
 checked = subprocess.run(['rtk', 'proxy', 'npm', 'run', 'check'], cwd=ROOT, text=True, capture_output=True)
 assert checked.returncode == 0, checked.stdout+checked.stderr
 
@@ -39,7 +40,7 @@ tested = reports['knowledge-browser-code']['production_source_hashes']
 assert set(tested) == set(expected)
 for name, data in expected.items():
     assert sha(data) == tested[name], 'Production source changed after browser verification: '+name
-docs = ['provider-defaults', 'summary-guide', 'knowledge-guide', 'verification', 'qwen-access-diagnosis', 'inline-structure', 'annotation-stability', 'compact-layout', 'block-reading', 'architecture']
+docs = ['provider-defaults', 'summary-guide', 'knowledge-guide', 'model-library-guide', 'verification', 'qwen-access-diagnosis', 'inline-structure', 'annotation-stability', 'compact-layout', 'block-reading', 'architecture']
 copies = [('INSTALL.md', 'user-guide.md'), ('INSTALL.html', 'user-guide.html'), ('codex-setup.md', 'codex-setup.md')]
 copies += [(name+suffix, name+suffix) for name in docs for suffix in ['.md', '.html']]
 for destination, source in copies:
@@ -102,7 +103,7 @@ assert '沉浸式翻译' not in (ROOT/'README.md').read_text()
 
 synced = []
 for destination in sorted(RELEASES.iterdir()):
-    if not destination.is_dir() or destination == RELEASE or not re.fullmatch(r'(?:dianyi|shiyi)-\d+\.\d+\.\d+', destination.name):
+    if not destination.is_dir() or destination == RELEASE or not (destination.name=='dianyi' or re.fullmatch(r'(?:dianyi|shiyi)-\d+\.\d+\.\d+', destination.name)):
         continue
     shutil.copytree(RELEASE, destination, dirs_exist_ok=True)
     for name, data in expected.items():
@@ -114,7 +115,7 @@ report = {
     'version': VERSION, 'result': 'pass', 'zip': ARCHIVE.name,
     'bytes': ARCHIVE.stat().st_size, 'sha256': sha(ARCHIVE.read_bytes()),
     'production_files': len(expected), 'production_scripts': len(list((ROOT/'src').rglob('*.js'))),
-    'unit_tests': reports['unit']['passed'], 'background_browser_checks': 15, 'native_panel_checks': 11,
+    'unit_tests': reports['unit']['passed'], 'background_browser_checks': 15, 'native_panel_checks': 11, 'shared_models_upgrade_checks': 14,
     'source_package_byte_match': True, 'browser_tested_production_bytes_unchanged': True,
     'new_default_permissions': ['alarms', 'unlimitedStorage'], 'csp_and_host_permissions_unchanged_since': '0.12.1',
     'no_history_permission': 'history' not in manifest['permissions'], 'global_side_panel_disabled': True,

@@ -1,0 +1,38 @@
+<!doctype html><html lang="zh-CN"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>点译 v0.14.0 · 模型复用与词库保护</title><style>*{box-sizing:border-box}html{scroll-behavior:smooth;scroll-padding-top:90px}body{margin:0;background:#f5f5f0;color:#263735;font:14px/1.95 -apple-system,BlinkMacSystemFont,"Segoe UI","PingFang SC",sans-serif}a{color:#006665;text-decoration:none}a:hover{text-decoration:underline}header{padding:18px 30px;position:sticky;top:0;background:#fbfcf8ef;border-bottom:1px solid #dfe5df;backdrop-filter:blur(10px);display:flex;align-items:center;justify-content:space-between;gap:18px;z-index:5}.brand{font-size:23px;font-weight:650;letter-spacing:2px}header small{font-size:11px;color:#61716c;letter-spacing:.7px}.layout{max-width:1400px;display:grid;grid-template-columns:218px minmax(0,1fr);gap:30px;margin:auto;padding:35px 30px 60px}nav{position:sticky;top:105px;height:calc(100vh - 130px);overflow:auto;padding-right:12px}nav small{display:block;font-size:10px;letter-spacing:1.6px;color:#61716c;margin:0 10px 15px}nav a{display:block;padding:8px 10px;margin:3px 0;border-radius:7px;color:#61716c;font-size:12px}nav a:hover{background:#eaf3ee;text-decoration:none;color:#006665}main{min-width:0;border:1px solid #dfe5df;border-radius:13px;background:#fff;padding:37px 43px 45px}.eyebrow{font-size:10px;color:#006665;letter-spacing:2px;margin-bottom:12px;font-weight:600}h1{font-size:30px;font-weight:600;line-height:1.4;margin:0 0 15px;letter-spacing:-.6px}h2{font-size:21px;font-weight:550;margin:37px 0 15px;line-height:1.5}h3{font-size:16px;font-weight:550;margin:25px 0 12px}p{margin:11px 0 17px}blockquote{margin:24px 0;background:#edf4ec;border-left:3px solid #006665;padding:16px 20px;border-radius:0 8px 8px 0;color:#406247;font-size:13px}blockquote p{margin:0}.table-scroll{overflow-x:auto;border:1px solid #dfe5df;border-radius:9px;margin:17px 0 23px}table{width:100%;border-collapse:collapse;font-size:12px;line-height:1.9}th{text-align:left;background:#f2f7ed;color:#4e704d;font-weight:500;padding:12px 14px;border-bottom:1px solid #dfe5df}td{padding:13px 14px;border-bottom:1px solid #e5ebe0;vertical-align:top;min-width:100px}tr:last-child td{border-bottom:0}td:first-child{min-width:130px}tr:nth-child(even) td{background:#fcfdf8}ul,ol{padding-left:23px}li{margin:8px 0}code{background:#eef3e8;border-radius:4px;padding:2px 5px;font-size:12px;overflow-wrap:anywhere}pre{padding:17px 19px;border-radius:8px;background:#eef3e8;overflow:auto;font-size:12px}pre code{padding:0}strong{font-weight:600}.doc-footer{font-size:11px;line-height:1.9;color:#61716c;border-top:1px solid #dfe5df;padding-top:22px;margin-top:35px}.source-label{font-size:10px;color:#61716c;letter-spacing:.5px}.download{font-size:12px;padding:9px 14px;border:1px solid #006665;color:#006665;border-radius:8px;white-space:nowrap;display:inline-block}@media(max-width:900px){.layout{grid-template-columns:175px minmax(0,1fr);gap:20px;padding:25px 20px}main{padding:28px 27px}header small{display:none}}@media(max-width:650px){header{padding:14px 19px}.brand{font-size:20px}.layout{display:block;padding:20px 13px}nav{height:auto;position:static;display:flex;flex-wrap:wrap;gap:5px;padding:0;margin-bottom:18px}nav small{width:100%;margin:0 6px 5px}nav a{font-size:10px;padding:5px 8px;border:1px solid #dfe5df;margin:0}main{padding:25px 20px}h1{font-size:24px}h2{font-size:20px}.table-scroll{margin-left:-6px;margin-right:-6px}table{font-size:11px}td,th{padding:10px;min-width:120px}.download{font-size:10px}}@media(prefers-reduced-motion:reduce){html{scroll-behavior:auto}}@media print{header,nav{display:none}.layout{display:block;padding:0}body{background:white}main{border:0;padding:0}h2{break-after:avoid}tr{break-inside:avoid}}</style></head><body><header><div><span class="brand">点译</span> <small>点一下，读懂。 / v0.14.0</small></div><span class="source-label">CHROME / EDGE</span></header><div class="layout"><nav aria-label="文档目录"><small>CONTENTS / 目录</small><a href="#section-1">模型添加一次，各场景直接选择</a><a href="#section-2">编辑和删除会影响哪些场景</a><a href="#section-3">旧配置自动迁入</a><a href="#section-4">轨迹和回顾自动检索</a><a href="#section-5">词库保存在本地，升级不重建</a><a href="#section-6">正确升级与 JSON 恢复</a></nav><main><div class="eyebrow">使用与升级 / 本地模型库</div><h1>点译 v0.14.0 · 模型复用、自动检索与词库升级保护</h1>
+<p>2026-11-04</p>
+<h2 id="section-1">模型添加一次，各场景直接选择</h2>
+<p>在「模型库」添加模型，选择厂家，填写 Key 后「连接并保存」。地址、型号和 Key 统一保存在本浏览器，翻译、网页总结与日周月年回顾不再各配一份。</p>
+<ul>
+<li><strong>翻译</strong>：在模型库下方选择翻译的默认模型和备用。</li>
+<li><strong>总结与回顾</strong>：到「总结设置」选择已保存模型，无需重填 Key。网页、每日、每周、每月、每年和专题共用这个选择。</li>
+<li><strong>各自选择</strong>：两个场景可以选同一个连接，也可以选不同连接；默认与备用顺序分别保存。</li>
+<li><strong>多 Key</strong>：同厂家不同 Key 仍是不同连接，不按地址自动合并，避免错用账户。</li>
+<li><strong>翻译专用模型</strong>：例如 <code>qwen-mt-flash</code> 可以用于翻译，总结下拉框会标为「仅翻译」，禁止选用。</li>
+</ul>
+<p>模型库最多保存 32 个连接，每场景最多使用 8 个。选择、修改备用顺序和从场景移除连接不发起连接测试；新保存连接会发送固定测试词，使用少量额度。后台网页和周期任务仍按已授权规则调用所选总结模型。</p>
+<p>新增模型默认勾选「在此浏览器长期记住密钥」，也可以取消，只保留当前浏览器会话。升级保留旧模型原来的保存方式，不把旧会话 Key 自动改为长期保存。明文 Key 不显示在列表，不发送给网页，不进入词库或知识导出。</p>
+<h2 id="section-2">编辑和删除会影响哪些场景</h2>
+<p>编辑模型库中的连接时，所有引用它的场景同步使用新配置和 Key。从一个场景「移出本场景」只移除引用，模型与 Key 留在模型库，其他场景继续使用。</p>
+<p>在模型库删除连接会同时删除其 Key 和场景引用，界面会列出受影响的场景；原默认连接删除后优先使用该场景已启用的备用，没有备用时需要重选。数据与隐私中的「清除模型库全部 Key」会影响所有引用场景，但保留模型配置和本地阅读资料。</p>
+<p>正在用于总结的模型不能直接改成翻译专用 MT 型号，需先明确从总结场景移除。新增未使用的模型不会取消正在处理的其他模型任务。</p>
+<h2 id="section-3">旧配置自动迁入</h2>
+<p>升级时将原翻译、总结连接登记到同一个模型库，保留原默认、备用顺序、Key 归属及保存期限。同一个地址的不同 Key 不自动合并；旧数据里即使碰巧使用相同连接 ID，也会保留为独立记录。</p>
+<p>先写入新的凭据记录，再保存引用关系，最后清理旧存储。已经清除的 Key 不会在重新加载后被旧数据复活。原词库、阅读轨迹和翻译偏好不参与模型迁移。</p>
+<h2 id="section-4">轨迹和回顾自动检索</h2>
+<p>在「我的轨迹」「阅读回顾」输入关键词，停止输入约 <strong>350 毫秒</strong> 后自动检索；中文输入法正在组词时不检索，完成输入后再更新。清空关键词恢复结果，日期、来源、项目和标签选择后自动更新，不需要点击「筛选」。</p>
+<p>检索只读取本地资料，不调用模型。旧请求迟到时不会覆盖新的检索条件。分页、生成回顾、导出和清理继续使用当前范围；未保存的备注草稿仍保留。</p>
+<h2 id="section-5">词库保存在本地，升级不重建</h2>
+<p>词句继续使用原 <code>shiyi-vocabulary</code> 本地数据库及原记录 ID。升级只补齐缺少的存储结构，不删除词句、不换数据库名称。已有释义不受模型库调整影响。</p>
+<p>每次新增、编辑、删除、撤销或恢复词句后，自动在浏览器本地存储更新一份副本。数据与隐私页面显示副本数量与更新时间，可手动重试。正常数据结构升级和浏览器重启保留词库；数据库被重新创建时，可从该浏览器内仍存在的副本恢复。主动删除词句后不会被旧副本重新添加。</p>
+<p>自动副本仍在同一个浏览器的扩展存储内，不能替代独立文件。浏览器卸载扩展时会清理扩展数据，这是浏览器的存储行为。<a href="https://developer.chrome.com/docs/extensions/reference/api/storage">Chrome 官方说明</a></p>
+<h2 id="section-6">正确升级与 JSON 恢复</h2>
+<ol>
+<li><strong>保留原安装目录。</strong> 将新版文件覆盖进去，在 <code>chrome://extensions</code> 或 <code>edge://extensions</code> 点击点译的「重新加载」，不要先卸载。</li>
+<li>新安装建议固定使用 <code>releases/dianyi</code> 或自己指定的固定文件夹，之后持续覆盖，不要每次换成另一个带版本号的目录。未打包扩展的身份与加载方式相关；保持身份才能继续访问原本地数据。<a href="https://developer.chrome.com/docs/extensions/reference/manifest/key">Chrome 扩展标识说明</a></li>
+<li>若文件已更新而后台仍是旧版，管理页会提供「打开扩展管理」入口，在浏览器扩展管理页点击重新加载后再打开管理页。</li>
+<li>需要更换目录、浏览器或卸载前，在「我的词句库」点击「导出词库」。在新安装中点击「恢复词库」选择原 JSON，或在「数据与隐私」选择「恢复词库 JSON」。</li>
+</ol>
+<p>恢复在本地完成，不请求模型。先校验整批文件，再一次性合并；相同原文和目标语言保留当前释义，只新增缺少的词句。ID 碰撞时为新词句生成新 ID，不覆盖其他词条。词句来源去除查询参数，密钥等额外字段不会导入。单文件上限 16 MB、每批最多 20,000 条，超限请分批恢复。</p>
+<p>如自动副本损坏，保留原副本并提供恢复说明，不让整个插件无法使用。原文数据库写入成功而副本更新失败时，会清楚显示副本状态，可以重试或导出文件。</p>
+<p>本轮验证使用真实 Chrome、旧版本安装 ZIP、同一安装目录和隔离临时资料。测试词句与 Key 均为合成数据，不读取用户浏览器或付费模型账户。原生 Edge 尚未单独验证。</p>
+<footer class="doc-footer">点译 v0.14.0 · 自己的模型，按块阅读<br>文档提供 HTML 阅读版及 Markdown 可编辑版本。</footer></main></div></body></html>

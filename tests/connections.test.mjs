@@ -25,22 +25,22 @@ test('same-endpoint keys stay independent, blank new connection cannot borrow, a
   assert.equal(await settings.getSecret(bank.items[0].profile),'primary-only-secret');
   assert.equal(await settings.getSecret(bank.items[1].profile),'backup-only-secret');
   await assert.rejects(settings.resolveProfile({...profile,connectionId:null},''),{code:'MISSING_KEY'});
-  assert.equal(Object.keys(data.local.modelCredentials).length,1);assert.equal(Object.keys(data.session.modelCredentials).length,1);
+  assert.equal(Object.keys(data.local.modelLibraryCredentials).length,1);assert.equal(Object.keys(data.session.modelLibraryCredentials).length,1);
   assert(!JSON.stringify(await settings.publicConfig()).includes('only-secret'));
   await settings.updateConnection('translation',second.id,'default');value=await settings.config();
   assert.equal(value.profile.connectionId,second.id);assert.equal(await settings.getSecret(value.profile),'backup-only-secret');
   await settings.saveProfile({...value.profile,rememberKey:true},'');
-  assert.equal(Object.keys(data.local.modelCredentials).length,2);assert.equal(Object.keys(data.session.modelCredentials).length,0);
+  assert.equal(Object.keys(data.local.modelLibraryCredentials).length,2);assert.equal(Object.keys(data.session.modelLibraryCredentials).length,0);
   await assert.rejects(settings.updateConnection('translation',second.id,'delete'),{code:'DEFAULT_CONNECTION'});
   await settings.updateConnection('translation',first.id,'delete');
-  assert.equal((await settings.config()).profile.connectionId,second.id);assert(!data.local.modelCredentials[first.id]);
+  assert.equal((await settings.config()).profile.connectionId,second.id);assert(data.local.modelLibraryCredentials[first.id]);await settings.removeLibraryConnection(first.id);assert(!data.local.modelLibraryCredentials[first.id]);
 });
 test('legacy model and session/local persistence migrate once, with no resurrection after clearing', async () => {
   const data=memory({config:{profile:{...profile,rememberKey:true},summaryProfile:{...profile,name:'总结旧连接'},summaryConfigured:true,prefs:{...DEFAULT_PREFS}},credential:{identity:secretIdentity(profile),apiKey:'legacy-translation'}});
   data.session.summaryCredential={identity:secretIdentity(profile),apiKey:'legacy-summary'};
   await settings.initializeStorage();let value=await settings.config();
   assert.equal(await settings.getSecret(value.profile),'legacy-translation');assert.equal(await settings.getSummarySecret(value.summaryProfile),'legacy-summary');
-  assert(!data.local.credential);assert(!data.session.summaryCredential);assert(data.session.summaryCredentials['summary-primary']);
+  assert(!data.local.credential);assert(!data.session.summaryCredential);assert(data.session.modelLibraryCredentials['summary-primary']);
   assert(!data.local.summaryCredentials);assert.equal(value.profile.model,profile.model);
   await settings.clearCredential();await settings.initializeStorage();value=await settings.config();
   assert.equal(await settings.getSecret(value.profile),'');assert.equal(await settings.getSummarySecret(value.summaryProfile),'legacy-summary');
@@ -49,15 +49,54 @@ test('concurrent connection saves serialize without losing keys and enforce capa
   const data=memory();await settings.initializeStorage();
   await Promise.all(Array.from({length:8},(_,i)=>settings.saveProfile({...profile,name:'连接 '+i},'independent-'+i,{id:null})));
   assert.equal((await settings.config()).modelConnections.translation.items.length,8);
-  assert.equal(Object.keys(data.session.modelCredentials).length,8);
+  assert.equal(Object.keys(data.session.modelLibraryCredentials).length,8);
   await assert.rejects(settings.saveProfile(profile,'ninth',{id:null}),{code:'CONNECTION_LIMIT'});
-  assert.equal(Object.keys(data.session.modelCredentials).length,8);
+  assert.equal(Object.keys(data.session.modelLibraryCredentials).length,8);
 });
 test('clearing one purpose removes all its primary and backup keys without touching the other purpose', async () => {
   memory();await settings.initializeStorage();await settings.saveProfile(profile,'translation');await settings.saveSummaryProfile(profile,'summary');await settings.saveSummaryProfile({...profile,name:'summary backup'},'summary-backup',{id:null});
   await settings.clearSummaryCredential();const value=await settings.config();
   assert.equal(await settings.getSecret(value.profile),'translation');
   for(const item of value.modelConnections.summary.items)assert.equal(await settings.getSummarySecret(item.profile),'');
+});
+test('one local library connection is selected by both scenes without copying or re-entering its Key', async () => {
+  const data=memory();await settings.initializeStorage();const saved=await settings.saveLibraryConnection({...profile,rememberKey:true},'shared-local-secret');
+  await settings.assignConnection('translation',saved.id);await settings.assignConnection('summary',saved.id);
+  const value=await settings.config();assert.equal(value.profile.connectionId,value.summaryProfile.connectionId);
+  assert.equal((await settings.resolveProfile(value.profile)).apiKey,'shared-local-secret');assert.equal((await settings.resolveSummaryProfile(value.summaryProfile)).apiKey,'shared-local-secret');
+  assert.equal(Object.keys(data.local.modelLibraryCredentials).length,1);assert.equal(value.modelLibrary.items.length,1);
+  assert(!JSON.stringify(await settings.publicConfig()).includes('shared-local-secret'));
+  await settings.initializeStorage();assert.equal(await settings.getSummarySecret((await settings.config()).summaryProfile),'shared-local-secret');
+});
+test('scene defaults and backups remain independent while a shared connection edit reaches all references', async()=>{
+  memory();await settings.initializeStorage();const a=await settings.saveLibraryConnection({...profile,rememberKey:true},'one'),b=await settings.saveLibraryConnection({...profile,name:'Other'},'two');
+  await settings.assignConnection('translation',a.id);await settings.assignConnection('summary',b.id);await settings.assignConnection('summary',a.id,false);
+  await settings.saveLibraryConnection({...profile,name:'Renamed',rememberKey:true},'',{id:a.id});const value=await settings.config();
+  assert.equal(value.profile.name,'Renamed');assert.equal(value.modelConnections.summary.defaultId,b.id);assert.equal(value.modelConnections.summary.items[1].profile.name,'Renamed');
+  assert(value.modelConnections.summary.items[1].backup);assert.equal(await settings.getSecret(value.profile),'one');
+});
+test('removing a scene reference preserves the saved model and shared credential; global delete clears all uses',async()=>{
+  const data=memory();await settings.initializeStorage();const a=await settings.saveLibraryConnection({...profile,rememberKey:true},'shared');
+  await settings.assignConnection('translation',a.id);await settings.assignConnection('summary',a.id);await settings.updateConnection('translation',a.id,'delete');
+  let value=await settings.config();assert.equal(value.modelLibrary.items.length,1);assert.equal(await settings.getSummarySecret(value.summaryProfile),'shared');
+  await settings.removeLibraryConnection(a.id);value=await settings.config();assert.equal(value.modelLibrary.items.length,0);assert.equal(value.summaryConfigured,false);assert.equal(Object.keys(data.local.modelLibraryCredentials).length,0);
+});
+test('old duplicate connection IDs keep distinct keys during migration and never merge by endpoint alone',async()=>{
+  const data=memory({config:{modelConnections:{translation:{defaultId:'same',items:[{id:'same',profile,backup:true}]},summary:{defaultId:'same',items:[{id:'same',profile,backup:true}]}},summaryConfigured:true},modelCredentials:{same:{identity:secretIdentity(profile),apiKey:'old-translation'}},summaryCredentials:{same:{identity:secretIdentity(profile),apiKey:'old-summary'}}});
+  await settings.initializeStorage();const value=await settings.config();assert.notEqual(value.profile.connectionId,value.summaryProfile.connectionId);
+  assert.equal(await settings.getSecret(value.profile),'old-translation');assert.equal(await settings.getSummarySecret(value.summaryProfile),'old-summary');assert.equal(Object.keys(data.local.modelLibraryCredentials).length,2);
+});
+test('translation-only models cannot be assigned to summary or replace an in-use summary model',async()=>{
+  memory();await settings.initializeStorage();const mt=await settings.saveLibraryConnection({provider:'qwen',model:'qwen-mt-flash'},'mt');
+  await assert.rejects(settings.assignConnection('summary',mt.id));assert.equal((await settings.config()).summaryConfigured,false);
+  const saved=await settings.saveLibraryConnection(profile,'generic');await settings.assignConnection('summary',saved.id);
+  await assert.rejects(settings.saveLibraryConnection({provider:'qwen',model:'qwen-mt-flash'},'new',{id:saved.id}),{code:'MODEL_IN_USE'});
+  assert.equal((await settings.config()).summaryProfile.model,profile.model);
+});
+test('clearing shared keys affects their references and cannot resurrect old credential stores on restart',async()=>{
+  const data=memory();await settings.initializeStorage();const saved=await settings.saveLibraryConnection({...profile,rememberKey:true},'shared');await settings.assignConnection('translation',saved.id);await settings.assignConnection('summary',saved.id);
+  await settings.clearLibraryCredentials();data.local.modelCredentials={[saved.id]:{identity:secretIdentity(profile),apiKey:'stale-copy'}};await settings.initializeStorage();const value=await settings.config();
+  assert.equal(await settings.getSecret(value.profile),'');assert.equal(await settings.getSummarySecret(value.summaryProfile),'');assert(!data.local.modelCredentials);
 });
 const policy = () => ({modelConnections:{translation:{defaultId:'primary',items:[{id:'disabled',backup:false,profile:{name:'关闭的备用'}},{id:'backup',backup:true,profile:{name:'备用',model:'small',endpoint:profile.endpoint,auth:'bearer',hasKey:true}},{id:'primary',backup:true,profile:{name:'默认',model:'small',endpoint:profile.endpoint,auth:'bearer',hasKey:false}}]}}});
 test('default always goes first, enabled backups follow saved order, and an expired primary still permits backup entry', async () => {

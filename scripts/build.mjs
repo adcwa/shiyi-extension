@@ -10,7 +10,7 @@ await fs.mkdir(destination, { recursive: true });
 await fs.cp(path.join(root, 'src'), destination, { recursive: true, filter: source => !path.relative(path.join(root, 'src'), source).split(path.sep).some(part => part === '__pycache__' || part.startsWith('.')) && !source.endsWith('.pyc') });
 await fs.copyFile(path.join(root, 'docs/user-guide.md'), path.join(destination, 'INSTALL.md'));
 await fs.copyFile(path.join(root, 'docs/user-guide.html'), path.join(destination, 'INSTALL.html'));
-for (const name of ['provider-defaults', 'summary-guide', 'knowledge-guide', 'verification', 'qwen-access-diagnosis', 'inline-structure', 'annotation-stability', 'compact-layout', 'block-reading', 'architecture'].flatMap(name => [name + '.md', name + '.html'])) await fs.copyFile(path.join(root, 'docs', name), path.join(destination, name));
+for (const name of ['provider-defaults', 'summary-guide', 'knowledge-guide', 'model-library-guide', 'verification', 'qwen-access-diagnosis', 'inline-structure', 'annotation-stability', 'compact-layout', 'block-reading', 'architecture'].flatMap(name => [name + '.md', name + '.html'])) await fs.copyFile(path.join(root, 'docs', name), path.join(destination, name));
 await fs.copyFile(path.join(root, 'docs', 'codex-setup.md'), path.join(destination, 'codex-setup.md'));
 const manifest = JSON.parse(await fs.readFile(path.join(destination, 'manifest.json'), 'utf8'));
 if (manifest.version !== pkg.version) throw new Error('Manifest version does not match package version');
@@ -63,4 +63,6 @@ const centralData = Buffer.concat(central), end = Buffer.alloc(22); end.writeUIn
 const zip = path.join(root, 'releases', `dianyi-chrome-edge-${pkg.version}.zip`); await fs.writeFile(zip, Buffer.concat([...locals, centralData, end]));
 // Keep the legacy unpacked path as an install/test compatibility alias.
 await fs.cp(destination, path.join(root, 'releases', `shiyi-${pkg.version}`), { recursive: true });
+// A fixed folder avoids changing the extension identity on later local upgrades.
+await fs.cp(destination, path.join(root, 'releases', 'dianyi'), { recursive: true });
 console.log(`Built ${files.length} production files\nUnpacked: ${destination}\nPackage: ${zip}`);

@@ -36,6 +36,21 @@ export const countEntries = () => transaction(['entries'], 'readonly', tx => res
 export const getEntry = id => transaction(['entries'], 'readonly', tx => result(tx.objectStore('entries').get(id)));
 export const findEntry = (text, language) => transaction(['entries'], 'readonly', tx => result(tx.objectStore('entries').index('identity').get(entryIdentity(text, language))));
 export const getEpoch = () => transaction(['meta'], 'readonly', async tx => (await result(tx.objectStore('meta').get('epoch')))?.value || 0);
+export const getMeta = id => transaction(['meta'], 'readonly', async tx => (await result(tx.objectStore('meta').get(id)))?.value);
+export const setMeta = (id,value) => transaction(['meta'], 'readwrite', tx => { tx.objectStore('meta').put({id,value}); });
+export function importEntries(entries) {
+  return transaction(['entries','meta','cache'], 'readwrite', async tx => {
+    const store=tx.objectStore('entries');let added=0,skipped=0;
+    for(const input of entries){
+      const identity=entryIdentity(input.text,input.targetLanguage);
+      if(await result(store.index('identity').get(identity))){skipped++;continue;}
+      const id=input.id&&!await result(store.get(input.id))?input.id:crypto.randomUUID();
+      store.add({...input,id,identity});added++;
+    }
+    if(added){tx.objectStore('cache').clear();await bump(tx);}
+    return {added,skipped};
+  });
+}
 async function bump(tx) { const meta = tx.objectStore('meta'), epoch = (await result(meta.get('epoch')))?.value || 0; meta.put({ id: 'epoch', value: epoch + 1 }); }
 export async function commitTranslation(entry, expectedEpoch) {
   return transaction(['entries', 'meta'], 'readwrite', async tx => {

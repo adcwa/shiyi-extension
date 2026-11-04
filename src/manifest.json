@@ -2,7 +2,7 @@
   "manifest_version": 3,
   "name": "点译 · 翻译与网页总结",
   "short_name": "点译",
-  "version": "0.13.0",
+  "version": "0.14.0",
   "description": "用自己的模型按需翻译，已存词句跨网页主动提示。支持整页翻译与独立模型的流式网页总结，复制与导出。",
   "minimum_chrome_version": "120",
   "permissions": [

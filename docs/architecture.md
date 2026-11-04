@@ -1,4 +1,4 @@
-# 点译 v0.13.0 · 实现说明
+# 点译 v0.14.0 · 实现说明
 
 2026-11-04
 
@@ -18,7 +18,7 @@ lib/site-policy.js 将域名或完整网址规范化为域名，按同域名及�
 | background.js | 可信消息、文档启用检查、翻译与总结调用编排、原生侧栏打开、取消、同步及菜单入口 |
 | lib/site-policy.js | 黑名单规范化、域名边界、冗余规则合并及旧策略迁移 |
 | lib/context-menu.js | 原生菜单定义、注册、启停状态与浏览器事件路由，可独立验证 |
-| lib/settings.js | 配置串行保存；默认会话密钥与明确勾选的本机凭据，均限制为可信扩展上下文 |
+| lib/settings.js | 模型库与场景引用串行保存；共用连接只保存一份凭据，均限制为可信扩展上下文 |
 | lib/model.js、block-model.js | 固定用户端点的安全 HTTP 请求、响应长度与结构校验、段落片段对齐 |
 | lib/db.js | 本地 IndexedDB 的词库、请求缓存、页面映射暂存、撤销与修订控制 |
 | content/content.js | 原生选区、短词可还原装饰、右键选区快照、悬浮层和小猫功能菜单 |
@@ -68,7 +68,9 @@ v0.12.1 保留 `sidePanel` 权限，移除清单的全局 `side_panel.default_pa
 
 ## 独立总结连接、正文与流式任务
 
-配置的 `summaryProfile`／`summaryPrefs` 与原 `profile`／`prefs` 分离；`summaryCredential` 与 `credential` 是独立的 session／local 记录，分别按端点及鉴权身份匹配，即使同地址也不读取另一用途的 Key。两套凭据均默认会话保存，分别明确 `rememberKey` 才写 local，均限制可信扩展上下文。总结默认为千问 `qwen-flash`，拒绝 `qwen-mt-*`；翻译默认及 MT 协议不变。保存总结配置或清除 Key 会停止相关总结，不修改翻译连接。连接测试用固定短文检查真实流式能力，不发送网页资料。
+v0.14.0 的 `modelLibrary` 统一保存模型配置，`modelConnections` 是按场景默认和备用顺序生成的引用视图，保留旧调用接口。`modelLibraryCredentials` 按连接 ID 和端点／鉴权身份存一份 Key，场景引用同连接时复用；不同连接即使地址相同也不合并。旧凭据先复制到原持久区域，再提交配置，最后清理旧字段。新建连接默认本机长期保存，旧会话 Key 保留原期限。凭据在受信扩展上下文中保存，完整凭据写入后才恢复队列，避免在 session/local 迁移中途读取未完成状态。
+
+总结场景拒绝 MT 专用型号；默认与备用可独立于翻译选择。移出场景保留模型库及 Key，全局删除清理全部引用。编辑连接只取消实际引用场景的任务，不中断其他模型。模型库测试发送固定短词；实际总结使用 SSE。
 
 `summary-extract.js` 通过 `chrome.scripting.executeScript` 在顶层隔离环境优先读取 article，再读 main／主区域，最后回退正文。排除表单值、编辑区、隐藏、导航、侧边及插件节点，保留主要正文代码与表格；不进入 iframe、Shadow DOM、PDF、Canvas。仅译文模式通过原文访问器恢复来源文字。最多 60,000 字符及有界节点遍历，截取标志进入公开状态；执行前后核对真实标签页 URL，防止把切换前页面当作当前来源。
 
@@ -170,3 +172,9 @@ TRANSLATE_BLOCK 与 TRANSLATE_BLOCKS 共用可信来源、文档身份、取消�
 - [MV3 后台生命周期](https://developer.chrome.com/docs/extensions/develop/concepts/service-workers/lifecycle)
 - [存储访问级别](https://developer.chrome.com/docs/extensions/reference/api/storage)
 - [Runtime 消息](https://developer.chrome.com/docs/extensions/reference/api/runtime)
+
+## 自动检索与词库保护（v0.14.0）
+
+轨迹及回顾输入以 350ms 防抖触发，中文组词结束后才检索；日期及选择项直接更新，序列号拒绝旧响应。生成、导出和清理先消费当前条件并取消待触发检索，避免迟到的界面刷新清掉主动生成的结果。筛选仅读本地，不调用模型。
+
+词库继续使用 shiyi-vocabulary v2，升级不更名或清空。新增 getMeta/setMeta 与事务式合并导入；所有词条先校验、按原文及语言去重，当前释义保留。词句写操作后在 chrome.storage.local 保存白名单字段的自动副本。初始化标记区分数据库重建和主动清空，防止旧副本复活删除；坏副本保留并提示，不阻断主功能。独立 JSON 文件用于换目录或卸载后的恢复。构建同时输出固定 releases/dianyi 安装目录，旧已解压别名继续覆盖同步；历史 ZIP 不修改。

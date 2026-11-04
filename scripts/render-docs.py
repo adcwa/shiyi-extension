@@ -14,6 +14,7 @@ parser = MarkdownIt('commonmark', {'html': False}).enable('table')
 documents = {
     'reading-trails-plan': ('需求与决策记录 / 阅读轨迹', '点译 · 阅读轨迹需求与决策记录'),
     'knowledge-guide': ('阅读知识 / 轨迹与周期回顾', f'点译 v{version} · 阅读轨迹与回顾'),
+    'model-library-guide': ('使用与升级 / 本地模型库', f'点译 v{version} · 模型复用与词库保护'),
     'codex-setup': ('本机认证 / Codex 使用指引', '点译 · 连接本机 Codex'),
     'marketing-copy': ('点译 / 产品介绍文案与实拍素材', '点译 · 宣传文案与素材说明'),
     'user-guide': ('GET STARTED / 安装与使用', '点译 · 安装与使用指南'),

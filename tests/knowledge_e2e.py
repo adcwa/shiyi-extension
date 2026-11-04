@@ -57,7 +57,7 @@ try:
    screenshots=OUT/'knowledge-ui';screenshots.mkdir(exist_ok=True);ui.locator('#notice').evaluate('n=>n.replaceChildren()');ui.locator('#knowledge-note').screenshot(path=str(screenshots/'remark-draft.png'))
    ui.goto(f'chrome-extension://{ext}/options.html#reviews');expect(ui.get_by_role('heading',name='阅读回顾',exact=True)).to_be_visible();ui.goto(f'chrome-extension://{ext}/options.html#trails');ui.locator('[data-k-id="'+draft_id+'"]').click();expect(ui.locator('#knowledge-note-text')).to_have_value('尚未保存的阅读想法');ui.get_by_role('button',name='丢弃修改',exact=True).click();expect(ui.locator('#knowledge-note-text')).to_have_value('核对原文实现边界。')
    passed('unsaved remark drafts survive background refresh, blur and route changes until explicitly discarded')
-   ui.locator('#knowledge-project').select_option('Research');ui.get_by_role('button',name='筛选',exact=True).click();expect(ui.locator('.knowledge-row')).to_have_count(1)
+   ui.locator('#knowledge-project').select_option('Research');expect(ui.locator('.knowledge-row')).to_have_count(1);ui.locator('.knowledge-row').first.click();expect(ui.locator('[data-kind="mermaid"] svg')).to_have_count(1)
    passed('project, tags and notes persist and participate in real trajectory filters')
    screenshots=OUT/'knowledge-ui';screenshots.mkdir(exist_ok=True)
    ui.evaluate('window.scrollTo(0,0)');ui.wait_for_timeout(300);ui.locator('#notice').evaluate('n=>n.replaceChildren()');assert ui.locator('[data-kind="mermaid"] svg').bounding_box()['width']>100;ui.screenshot(path=str(screenshots/'desktop.png'),full_page=True)

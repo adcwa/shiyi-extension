@@ -1,6 +1,6 @@
 {
   "name": "dianyi-extension",
-  "version": "0.13.0",
+  "version": "0.14.0",
   "private": true,
   "type": "module",
   "description": "点译：自有模型按需翻译，已存词句跨网页主动提示",

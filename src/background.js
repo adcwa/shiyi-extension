@@ -14,10 +14,12 @@ import { cleanSummaryProfile } from './lib/summary-presets.js';
 import { runSummaryModel } from './lib/summary-model.js';
 import { runConnections } from './lib/connections.js';
 import { connectionPermission, nativeCodex } from './lib/codex.js';
+import { createVocabularyBackup, cleanVocabularyImport } from './lib/vocabulary-backup.js';
 
 const pending = new Map();
 const knowledgeNavigations=new Map();
 const backupNotices = new Set();
+const vocabularyBackup=createVocabularyBackup({store,storage:chrome.storage.local});
 const contentFiles = ['lib/text.js', 'lib/block-text.js', 'lib/page-map.js', 'content/inline-structure.js', 'content/companion.js', 'content/reader.js', 'content/content.js','content/knowledge.js'];
 const uiPaths = new Set(['popup.html', 'options.html', 'summary.html']);
 function trusted(sender) {
@@ -138,6 +140,7 @@ const menus = createContextMenus(chrome, {
 const ready = settings.initializeStorage().then(async () => {
   await chrome.action.setBadgeBackgroundColor({ color: '#006665' });
   await store.purgeExpiredTrash();
+  await vocabularyBackup.initialize();
   await syncScripts();
   await summaryPanels.initialize();
   await knowledge.initialize();
@@ -212,6 +215,7 @@ async function handle(message, sender) {
           source: safeSource(sender.url, message.title || ''), context, createdAt: now, updatedAt: now }, epoch);
         if (!cached) await store.cacheWrite(cacheId, { ...output, modelName }, epoch).catch(() => {});
         reportBackup(sender, connected);
+        await vocabularyBackup.snapshot().catch(()=>{});
         await broadcast();
         return { entry: publicEntry(entry), saved: true, reused: !!cached };
       } finally { pending.delete(identity); }
@@ -297,11 +301,11 @@ async function handle(message, sender) {
       abortRequests();
       const result = await store.removeEntries(ids, scope(sender));
       setTimeout(() => store.purgeExpiredTrash().catch(() => {}), 8200);
-      await broadcast(); return result;
+      await vocabularyBackup.snapshot().catch(()=>{}); await broadcast(); return result;
     }
     case 'SHIYI/UNDO': {
       if (!trusted(sender)) await requireContent(sender);
-      const result = await store.undoDelete(boundedText(message.token, 80, '撤销标识'), scope(sender)); await broadcast(); return result;
+      const result = await store.undoDelete(boundedText(message.token, 80, '撤销标识'), scope(sender)); await vocabularyBackup.snapshot().catch(()=>{}); await broadcast(); return result;
     }
     case 'SHIYI/OPEN_OPTIONS': {
       if (!trusted(sender)) await requireContent(sender);
@@ -311,17 +315,22 @@ async function handle(message, sender) {
     }
     case 'SHIYI/UI_STATE': {
       uiOnly(sender); const value = await settings.publicConfig();
-      return { ...value, count: await store.countEntries(), pageCache: await store.pageCacheSummary(), tab: await tabState(message.tabId, value), version: VERSION };
+      return { ...value, count: await store.countEntries(), vocabularyBackup:await vocabularyBackup.status(), pageCache: await store.pageCacheSummary(), tab: await tabState(message.tabId, value), version: VERSION };
     }
     case 'SHIYI/LIBRARY': uiOnly(sender); return { entries: await store.listEntries() };
     case 'SHIYI/EDIT_ENTRY': {
       uiOnly(sender); abortRequests();
       const entry = await store.editEntry(boundedText(message.id, 80, '词句标识'), boundedText(message.translation, 2000, '释义'));
-      await broadcast(); return { entry };
+      await vocabularyBackup.snapshot().catch(()=>{}); await broadcast(); return { entry };
     }
     case 'SHIYI/EXPORT': {
       uiOnly(sender); return { format: 'shiyi-vocabulary', version: 1, exportedAt: new Date().toISOString(), entries: (await store.listEntries()).map(exportEntry) };
     }
+    case 'SHIYI/VOCABULARY_IMPORT': {
+      uiOnly(sender); const entries=cleanVocabularyImport(message.data);abortRequests();
+      const output=await store.importEntries(entries);await vocabularyBackup.snapshot().catch(()=>{});await broadcast();return output;
+    }
+    case 'SHIYI/VOCABULARY_BACKUP': uiOnly(sender);return vocabularyBackup.snapshot();
     case 'SHIYI/SAVE_PREFS': {
       uiOnly(sender);
       const next = cleanPrefs(message.prefs), previous = (await settings.config()).prefs;
@@ -333,7 +342,29 @@ async function handle(message, sender) {
     case 'SHIYI/SAVE_PROFILE': {
       uiOnly(sender); const profile = cleanProfile(message.profile);
       assert(await connectionPermission(profile), 'MODEL_PERMISSION', '请先允许访问这个模型连接。');
-      abortRequests(); const output = await settings.saveProfile(profile, message.apiKey, { ...(Object.hasOwn(message, 'connectionId') ? { id: message.connectionId } : {}), makeDefault: message.makeDefault === true }); await broadcast(); return output;
+      abortRequests(); const output = await settings.saveProfile(profile, message.apiKey, { ...(Object.hasOwn(message, 'connectionId') ? { id: message.connectionId } : {}), makeDefault: message.makeDefault === true });
+      if((await settings.config()).modelConnections.summary.items.some(item=>item.id===output.id)){summaries.cancelAll('共享模型已更新，已有内容保留。');await knowledge.resume();}
+      await broadcast(); return output;
+    }
+    case 'SHIYI/MODEL_LIBRARY_SAVE': {
+      uiOnly(sender); const profile = cleanProfile(message.profile);
+      assert(await connectionPermission(profile), 'MODEL_PERMISSION', '请先允许访问这个模型连接。');
+      const previous=await settings.config(),used=purpose=>previous.modelConnections[purpose].items.some(item=>item.id===message.connectionId);
+      const output = await settings.saveLibraryConnection(profile, message.apiKey, { id: message.connectionId ?? null });
+      if(used('translation'))abortRequests();if(used('summary')){summaries.cancelAll('模型库中的连接已更新，现有内容保留。');await knowledge.resume();} await broadcast(); return output;
+    }
+    case 'SHIYI/MODEL_LIBRARY_DELETE': {
+      uiOnly(sender);const previous=await settings.config(),used=purpose=>previous.modelConnections[purpose].items.some(item=>item.id===message.id);
+      await settings.removeLibraryConnection(boundedText(message.id, 80, '模型标识'));
+      if(used('translation'))abortRequests();if(used('summary'))summaries.cancelAll('模型连接已移除，现有内容保留。'); await broadcast(); return {};
+    }
+    case 'SHIYI/MODEL_ASSIGN': {
+      uiOnly(sender); await settings.assignConnection(message.purpose, boundedText(message.id, 80, '模型标识'), message.makeDefault !== false);
+      if (message.purpose === 'translation') abortRequests();
+      await broadcast(); return {};
+    }
+    case 'SHIYI/CLEAR_MODEL_KEYS': {
+      uiOnly(sender); await settings.clearLibraryCredentials(); abortRequests(); summaries.cancelAll('模型库 Key 已清除，内容保留。'); await broadcast(); return {};
     }
     case 'SHIYI/CONNECTION_UPDATE': {
       uiOnly(sender);
@@ -364,7 +395,7 @@ async function handle(message, sender) {
       uiOnly(sender); const profile = cleanSummaryProfile(message.profile);
       assert(await connectionPermission(profile), 'MODEL_PERMISSION', '请先允许访问这个总结连接。');
       summaries.cancelAll('总结模型已变更，旧任务已停止。');
-      const output = await settings.saveSummaryProfile(profile, message.apiKey, { ...(Object.hasOwn(message, 'connectionId') ? { id: message.connectionId } : {}), makeDefault: message.makeDefault === true }); await broadcast(); return output;
+      const output = await settings.saveSummaryProfile(profile, message.apiKey, { ...(Object.hasOwn(message, 'connectionId') ? { id: message.connectionId } : {}), makeDefault: message.makeDefault === true }); await knowledge.resume(); await broadcast(); return output;
     }
     case 'SHIYI/CLEAR_SUMMARY_KEY': uiOnly(sender); summaries.cancelAll('总结密钥已清除，生成已停止。'); await settings.clearSummaryCredential(); await broadcast(); return {};
     case 'SHIYI/TEST_SUMMARY_MODEL': {
@@ -432,7 +463,9 @@ chrome.tabs.onUpdated.addListener((tabId, change, tab) => {
 chrome.alarms.onAlarm.addListener(alarm=>ready.then(()=>alarm.name==='dianyi-knowledge-daily'?knowledge.runDue():alarm.name==='dianyi-knowledge-queue'?knowledge.pump():undefined).catch(()=>{}));
 chrome.storage.onChanged.addListener((changes,area)=>{
   const profileChanged=changes.config&&JSON.stringify(changes.config.oldValue?.modelConnections?.summary)!==JSON.stringify(changes.config.newValue?.modelConnections?.summary);
-  if(area==='local'&&(profileChanged||changes.summaryCredentials)||area==='session'&&changes.summaryCredentials)ready.then(()=>knowledge.resume()).catch(()=>{});
+  if(area==='local'&&profileChanged)ready.then(()=>knowledge.resume()).catch(()=>{});
+  // Credential saves resume from their completed API transaction, rather than
+  // reacting between local/session writes and reading a half-updated Key.
 });
 chrome.tabs.onRemoved.addListener(tabId => { abortRequests(item => item.tabId === tabId);knowledgeNavigations.delete(tabId); });
 chrome.runtime.onConnect.addListener(port => {
