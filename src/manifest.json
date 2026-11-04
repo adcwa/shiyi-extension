@@ -2,7 +2,7 @@
   "manifest_version": 3,
   "name": "点译 · 翻译与网页总结",
   "short_name": "点译",
-  "version": "0.14.1",
+  "version": "0.14.2",
   "description": "用自己的模型按需翻译，已存词句跨网页主动提示。支持整页翻译与独立模型的流式网页总结，复制与导出。",
   "minimum_chrome_version": "120",
   "permissions": [
@@ -68,5 +68,6 @@
       "run_at": "document_idle",
       "all_frames": false
     }
-  ]
+  ],
+  "key": "MIIBIjANBgkqhkiG9w0BAQEFAAOCAQ8AMIIBCgKCAQEAqrprg4BDXg0k0GneLf+9avfERcNN++mm1NUCmFhFnhDxdBJer8q5KY1+54Ez1wbkASMDr+J4TfOqjGzkjfnM+X6RoQUz9l9omzfBvdElAT2frTaaFzglObALL1UXy1fn7XWOBZMwPAPdi48yDCoCRERvU4pRK9xmNdLc+RWYRaOE42pQyLElHkh/RfjxCpiIgZCMkit9//f46khI0q+jN6BOzlfoib+aNMxTjEzUwILDkchP6YrK7iN7HxdDtShnWTqPAj1KBTIhkREpMfGb//fF3uZavzz7Wl8tW4I7LU3vLMXwrtHIllaFiisoQ2g+EJgUxBcze65Bs6Us1g5ctQIDAQAB"
 }

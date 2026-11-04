@@ -14,14 +14,15 @@ VERSION = json.loads((ROOT/'package.json').read_text())['version']
 RELEASES, OUT = ROOT/'releases', ROOT/'verification'
 RELEASE, ARCHIVE = RELEASES/f'dianyi-{VERSION}', RELEASES/f'dianyi-chrome-edge-{VERSION}.zip'
 sha = lambda data: hashlib.sha256(data).hexdigest()
-names = ['unit', 'knowledge', 'knowledge-native', 'knowledge-browser-code', 'shared-models', 'automatic-summary']
+names = ['unit', 'knowledge', 'knowledge-native', 'knowledge-browser-code', 'shared-models', 'automatic-summary','installation-identity']
 reports = {name: json.loads((OUT/f'{name}-{VERSION}.json').read_text()) for name in names}
 for name, report in reports.items():
     assert report['version'] == VERSION and report['result'] == 'pass', name
-assert reports['unit']['passed'] >= 174 and reports['unit']['failed'] == 0
+assert reports['unit']['passed'] >= 175 and reports['unit']['failed'] == 0
 assert len(reports['knowledge']['checks']) == 15 and len(reports['knowledge-native']['checks']) == 13
 assert len(reports['shared-models']['checks']) == 14
 assert len(reports['automatic-summary']['checks']) == 7
+assert len(reports['installation-identity']['checks']) == 4
 checked = subprocess.run(['rtk', 'proxy', 'npm', 'run', 'check'], cwd=ROOT, text=True, capture_output=True)
 assert checked.returncode == 0, checked.stdout+checked.stderr
 
@@ -31,6 +32,9 @@ for line in (RELEASES/'SHA256SUMS.txt').read_text().splitlines():
     if name == ARCHIVE.name:
         continue
     assert sha((RELEASES/name).read_bytes()) == checksum, name
+    with zipfile.ZipFile(RELEASES/name) as historical_archive:
+        previous_identity=json.loads(historical_archive.read('manifest.json')).get('key')
+        if previous_identity:assert previous_identity==json.loads((ROOT/'src/manifest.json').read_text())['key'], 'Never rotate the fixed extension identity'
     historical.append(name)
 
 def production(path):
@@ -61,6 +65,8 @@ with zipfile.ZipFile(ARCHIVE) as archive:
             assert not any(token in text for token in ['qa-primary-not-a-real-key', 'qa-backup-not-a-real-key', 'fixture-key', '__shiyiMenuReplay']), name
     manifest = json.loads(archive.read('manifest.json'))
     assert manifest['version'] == VERSION and not manifest.get('side_panel')
+    assert manifest.get('key') and manifest['key'] == json.loads((ROOT/'src/manifest.json').read_text())['key']
+    assert archive.getinfo('升级点译.command').external_attr >> 16 & 0o111
     with zipfile.ZipFile(RELEASES/'dianyi-chrome-edge-0.12.1.zip') as baseline:
         previous = json.loads(baseline.read('manifest.json'))
         assert set(manifest['permissions']) == set(previous['permissions']) | {'alarms', 'unlimitedStorage'}
@@ -106,9 +112,17 @@ synced = []
 for destination in sorted(RELEASES.iterdir()):
     if not destination.is_dir() or destination == RELEASE or not (destination.name=='dianyi' or re.fullmatch(r'(?:dianyi|shiyi)-\d+\.\d+\.\d+', destination.name)):
         continue
+    previous=json.loads((destination/'manifest.json').read_text())
     shutil.copytree(RELEASE, destination, dirs_exist_ok=True)
+    retained={**manifest}
+    if previous.get('key'):retained['key']=previous['key']
+    else:retained.pop('key',None)
+    (destination/'manifest.json').write_text(json.dumps(retained,ensure_ascii=False,indent=2)+'\n')
     for name, data in expected.items():
-        assert (destination/name).read_bytes() == data, str(destination/name)
+        if name=='manifest.json':
+            installed=json.loads((destination/name).read_text());assert {k:v for k,v in installed.items() if k!='key'}=={k:v for k,v in manifest.items() if k!='key'}
+            assert installed.get('key')==previous.get('key')
+        else:assert (destination/name).read_bytes() == data, str(destination/name)
     synced.append(destination.name)
 archives = sorted(RELEASES.glob('*chrome-edge-*.zip'))
 (RELEASES/'SHA256SUMS.txt').write_text(''.join(sha(path.read_bytes())+'  '+path.name+'\n' for path in archives))
@@ -125,6 +139,7 @@ report = {
     'unpacked_install_directories_synced': synced,
     'native_scope': reports['knowledge-native']['scope'],
     'automatic_summary_default':False,'manual_summary_independent':True,
+    'fixed_identity_on_fresh_installs':True,'legacy_install_identity_preserved':True,'directory_change_checks':4,
     'limitations': ['No paid-provider semantic/account test', 'Native Edge and physical resize gestures not verified', 'Legacy translation browser suites and unchanged native Codex helper not rerun', 'Browser-off schedules backfill only when automatic summary is enabled'],
 }
 (OUT/f'knowledge-release-{VERSION}.json').write_text(json.dumps(report, ensure_ascii=False, indent=2)+'\n')

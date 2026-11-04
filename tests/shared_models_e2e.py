@@ -7,13 +7,13 @@ from pathlib import Path
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from threading import Thread
 from playwright.sync_api import sync_playwright, expect
-import json, os, tempfile, time, zipfile
+import json, os, tempfile, time, zipfile, subprocess, sys
 
 ROOT=Path(__file__).resolve().parents[1]
 VERSION=json.loads((ROOT/'package.json').read_text())['version']
 OUT=ROOT/'verification';OUT.mkdir(exist_ok=True)
 SHOTS=OUT/'shared-models-ui';SHOTS.mkdir(exist_ok=True)
-report={'version':VERSION,'result':'running','scope':'Unmodified historical 0.13.0 ZIP upgraded in the same path to the new ZIP; isolated Chrome profile; real localhost HTTP/SSE; synthetic vocabulary; no paid/account credentials.','checks':[]}
+report={'version':VERSION,'result':'running','scope':'Unmodified historical 0.13.0 ZIP upgraded with the shipped updater in the original path; legacy key absence preserved; isolated Chrome profile; real localhost HTTP/SSE; synthetic vocabulary and credentials.','checks':[]}
 calls=[];errors=[]
 class Handler(BaseHTTPRequestHandler):
  def log_message(self,*args):pass
@@ -63,7 +63,12 @@ try:
   old_summary=api('SAVE_SUMMARY_PROFILE',profile={**base,'name':'Old summary','model':'summary-model'},apiKey='old-summary-fixture')['id']
   api('SAVE_SUMMARY_PREFS',prefs={'preset':'general','prompts':{}})
   word_ids=ui.evaluate('''async()=>{const store=await import(chrome.runtime.getURL('lib/db.js'));const ids=[];for(const [text,translation] of [['curiosity','好奇心'],['evidence','依据']]){const id=crypto.randomUUID();await store.commitTranslation({id,text,translation,kind:'word',targetLanguage:'zh-CN',sourceLanguage:'en',style:'regular',source:{url:'https://example.org/fixture',title:'Synthetic old vocabulary'},createdAt:1,updatedAt:2},await store.getEpoch());ids.push(id);}return ids;}''')
-  with zipfile.ZipFile(ROOT/'releases'/f'dianyi-chrome-edge-{VERSION}.zip') as z:z.extractall(extension)
+  ui.evaluate('''async()=>{const {createKnowledgeStore}=await import(chrome.runtime.getURL('lib/knowledge-store.js'));const db=createKnowledgeStore();const source={url:'https://example.org/legacy-evidence',title:'Legacy fixture',domain:'example.org'};await db.write({visits:[{id:'legacy-visit',visitedAt:1,source,title:source.title,domain:source.domain,summaryId:'legacy-summary',documentId:'legacy-document',note:'Legacy note',tags:[]}],documents:[{id:'legacy-document',source}],snapshots:[{id:'legacy-document',text:'Legacy original evidence'}],summaries:[{id:'legacy-summary',kind:'page',logicalKey:'page:legacy-document',documentId:'legacy-document',source,phase:'complete',text:'Legacy saved summary',createdAt:1,updatedAt:1}],jobs:[{id:'legacy-summary',status:'complete'}]});await db.close();}''')
+  incoming=directory/'new-download'
+  with zipfile.ZipFile(ROOT/'releases'/f'dianyi-chrome-edge-{VERSION}.zip') as z:z.extractall(incoming)
+  updated=subprocess.run([sys.executable,str(incoming/'upgrade/install.py'),'--source',str(incoming),'--target',str(extension)],text=True,capture_output=True)
+  assert updated.returncode==0,updated.stderr
+  assert 'key' not in json.loads((extension/'manifest.json').read_text())
   upgrade=context.new_page();upgrade.goto(f'chrome-extension://{old_id}/options.html#model')
   upgrade.wait_for_function("()=>document.querySelector('.page-heading h1')||document.querySelector('#retry')")
   if upgrade.get_by_role('button',name='打开扩展管理',exact=True).count():
@@ -82,6 +87,9 @@ try:
    bind();assert ext==old_id;state=api('UI_STATE');assert state['version']==VERSION;assert state['knowledgePrefs']['autoSummary'] is False;assert len(state['modelLibrary']['items'])==2
    assert sorted(e['id'] for e in api('LIBRARY')['entries'])==sorted(word_ids);assert state['vocabularyBackup']['count']==2
    assert state['modelConnections']['translation']['defaultId']==old_translation and state['modelConnections']['summary']['defaultId']==old_summary
+   legacy=api('KNOWLEDGE_DETAIL',id='legacy-visit');assert legacy['visit']['note']=='Legacy note' and legacy['summary']['text']=='Legacy saved summary'
+   assert any(s['text']=='Legacy original evidence' for s in api('KNOWLEDGE_EXPORT',originals=True)['snapshots'])
+   api('KNOWLEDGE_DELETE',ids=['legacy-visit'])
    passed('same-directory ZIP upgrade preserves extension identity, original vocabulary IDs, both model choices and local keys')
    expect(ui.locator('.page-heading h1')).to_have_text('模型库');assert ui.locator('#model-form').count()==0
    ui.goto(f'chrome-extension://{ext}/options.html#summary');assert ui.locator('#model-form,#model-key').count()==0
