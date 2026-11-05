@@ -35,11 +35,11 @@ export function updateModelGuidance(form, draft) {
 }
 export function changeProvider(draft, provider) {
   if (provider === draft.provider) return draft;
-  if (provider === 'custom') return { ...draft, provider, region: '', name: '自定义服务', auth: 'bearer', apiKey: '', rememberKey: draft.purpose==='library', advancedOpen: false };
+  if (provider === 'custom') return { ...draft, provider, region: '', name: '自定义服务', auth: 'bearer', apiKey: '', rememberKey: ['library', 'summary'].includes(draft.purpose), advancedOpen: false };
   if (provider === 'codex') return { provider, region: '', name: '本机 Codex', endpoint: 'codex://local', model: 'auto', auth: 'none', timeoutSeconds: 60, rememberKey: false, purpose: draft.purpose, connectionId: draft.connectionId, makeDefault: draft.makeDefault, apiKey: '', advancedOpen: false };
   const preset = presetFor(draft, provider, 'cn');
   if (!preset) throw new Error('请选择支持的厂家，或选择自定义服务。');
-  return { ...preset, rememberKey:draft.purpose==='library', purpose: draft.purpose, connectionId: draft.connectionId, makeDefault: draft.makeDefault, apiKey: '', advancedOpen: false };
+  return { ...preset, rememberKey:['library', 'summary'].includes(draft.purpose), purpose: draft.purpose, connectionId: draft.connectionId, makeDefault: draft.makeDefault, apiKey: '', advancedOpen: false };
 }
 export function changeRegion(draft, region) {
   const preset = presetFor(draft, draft.provider, region);

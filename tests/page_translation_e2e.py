@@ -109,7 +109,7 @@ try:
             initial=article.locator('main').inner_html();tab=ui.evaluate('async origin=>(await chrome.tabs.query({})).find(t=>t.url===origin+"/reading").id',origin)
             assert message(ui,'UI_STATE',tabId=tab)['tab']['enabled']
             article.locator('#note').fill('DO_NOT_SEND_CHANGED_FORM_VALUE')
-            popup=context.new_page();popup.goto(base+'/popup.html?tab='+str(tab));popup.get_by_role('button',name='翻译当前页面',exact=True).click()
+            popup=context.new_page();popup.goto(base+'/popup.html?tab='+str(tab));popup.get_by_role('button',name='翻译整页',exact=True).click()
             result=complete(ui,tab);assert result['completed']>=18 and result['failed']==0,result
             assert message(ui,'UI_STATE',tabId=tab)['tab']['enabled'] and message(ui,'UI_STATE')['blacklist']==[]
             assert article.locator('[data-shiyi-mark],[data-shiyi-meaning]').count()==0
@@ -147,6 +147,17 @@ try:
             assert restored==initial,report.get('restore_difference')
             assert article.evaluate('guideNode===document.getElementById("guide")&&leadNode===document.getElementById("lead").firstChild')
             passed('Translation-only updates the original text nodes, preserves link/button handlers and form state, switches without another model call, and restores exact original markup')
+
+            popup=context.new_page();popup.goto(base+'/popup.html?tab='+str(tab))
+            expect(popup.locator('#page-translate')).to_have_text('加载本地译文')
+            popup.locator('#page-mode').select_option('translation')
+            expect(popup.locator('#page-mode')).to_have_value('translation')
+            popup.locator('#page-translate').click()
+            assert complete(ui,tab)['mode']=='translation'
+            expect(article.locator('#lead')).to_contain_text('好奇心')
+            assert len(calls)==before
+            command(ui,tab,'restore');popup.close()
+            passed('popup restores cached blocks in the selected reading mode without a model request')
 
             # Subsequent jobs reuse only block-cache data, not vocabulary entries.
             before=len(calls);command(ui,tab,'translate','bilingual');complete(ui,tab);assert len(calls)==before

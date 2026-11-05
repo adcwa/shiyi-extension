@@ -1,9 +1,10 @@
+import { pageOrigin } from '../lib/core.js';
 import { api } from './common.js';
 import { SUMMARY_PRESETS } from '../lib/summary-presets.js';
 
 const $ = selector => document.querySelector(selector), R = globalThis.DianyiDocs;
-let tabId, port, result, view = 'content', follow = true, frame, toastTimer, exportTarget, retryBusy = false, unloading = false;
-const artifacts = new Map(), sourceViews = new Set(), positions = new Map();
+let tabId, port, result, view = 'content', follow = true, frame, toastTimer, exportTarget, retryBusy = false, unloading = false, followedStream = false, exportTrigger;
+const artifacts = new Map(), diagrams = new Map(), sourceViews = new Set(), positions = new Map();
 const active = () => ['queued','extracting', 'classifying', 'streaming'].includes(result?.phase);
 const scroller = $('#summary-scroller'), doc = $('#summary-doc');
 const statusLabels = { queued:'已保存 · 排队总结中',waiting:'已保存 · 等待模型连接', extracting: '正在读取网页…', classifying: '正在识别主题…', streaming: '正在生成总结…', complete: '总结完成', stopped: '已停止 · 内容已保留', interrupted: '生成已中断', error: '生成未完成' };
@@ -15,7 +16,7 @@ function remember() {
   if (positions.size > 16) positions.delete(positions.keys().next().value);
 }
 function restore() {
-  const position = positions.get(`${result?.id}:${view}`); if (!position) return;
+  const position = positions.get(`${result?.id}:${view}`); if (!position) { scroller.scrollTop = 0; return; }
   const anchor = doc.children[position.index];
   if (anchor) scroller.scrollTop += anchor.getBoundingClientRect().top - scroller.getBoundingClientRect().top - position.offset;
   else scroller.scrollTop = position.top;
@@ -37,12 +38,21 @@ function patch(parent, fresh) {
 function render() {
   frame = null; remember();
   const s = result, hasText = !!s?.text;
-  $('#source-title').textContent = s?.source?.title || '当前网页';
-  $('#source-detail').textContent = s ? [s.source?.domain, SUMMARY_PRESETS[s.chosen || s.preset]?.name, s.model].filter(Boolean).join(' · ') : '当前标签页 · 优先读取本地总结';
-  $('#summary-status').textContent = s?.automaticDisabled&&!hasText?'自动总结已关闭':s ? statusLabels[s.phase] || '正在准备总结…' : '正在准备总结…';
+  const title = s?.source?.title || '当前网页', source = s?.source?.url, status = $('#summary-status');
+  $('#source-title').textContent = title; $('#source-title').title = title;
+  $('#source-detail').textContent = s ? [s.source?.domain, SUMMARY_PRESETS[s.chosen || s.preset]?.name].filter(Boolean).join(' · ') : '当前标签页';
+  const sourceLink = $('#source-link');
+  sourceLink.hidden = !pageOrigin(source);
+  if (!sourceLink.hidden) sourceLink.href = source;
+  $('#source-model').textContent = [s?.model, Number.isFinite(s?.requestAttempts) ? `${s.requestAttempts} 次请求尝试` : '', s?.usage?.total_tokens != null ? `${s.usage.total_tokens} Token` : ''].filter(Boolean).join(' · ');
+  $('#summary-details').hidden = sourceLink.hidden && !$('#source-model').textContent;
+  const phaseLabel = s?.automaticDisabled && !hasText ? '自动总结已关闭' : statusLabels[s?.phase] || '正在准备总结…';
+  if (status.textContent !== phaseLabel) status.textContent = phaseLabel;
   $('#summary-stop').hidden = !active(); $('#summary-retry').hidden = active(); $('#summary-retry').disabled = retryBusy;
-  $('#summary-retry').textContent = hasText?'重新总结':'总结当前网页';
+  $('#summary-retry').textContent = hasText ? '重新总结' : s?.error ? '重试' : '总结当前网页';
+  $('#summary-retry').title = hasText ? '生成新版本，可能使用模型额度' : '';
   const warnings = [];
+  if (s?.localPreview) warnings.push('显示此地址上次保存的总结。网页若已更新，可重新总结。');
   if (s?.stale) warnings.push('网页已变化，正在等待当前页加载后自动总结。');
   if (s?.truncated) warnings.push('本页较长，本次仅纳入前 60,000 字符以内的已加载正文。');
   if (s?.fallback) warnings.push('主题识别结果不完整，已改用通用总结。');
@@ -67,18 +77,30 @@ function render() {
     const source = el.querySelector('.artifact-source'), preview = el.querySelector('.artifact-preview'), toggle = el.querySelector('[data-artifact-action="source"]');
     if (source && preview) { source.hidden = !sourceViews.has(el.dataset.artifact); preview.hidden = !source.hidden; if (toggle) toggle.textContent = source.hidden ? '源码' : '预览'; }
     if (el.dataset.kind === 'mermaid' && !el.dataset.mounted) {
-      el.dataset.mounted = 'true'; const item = artifacts.get(el.dataset.artifact);
-      R.diagram(item.source).then(svg => { if (!el.isConnected) return; remember(); el.querySelector('.artifact-preview').innerHTML = svg; if (follow && active()) scroller.scrollTop = scroller.scrollHeight; else restore(); }).catch(() => { if (el.isConnected) el.querySelector('.artifact-preview').textContent = '图形未能预览，仍可复制或导出源码。'; });
+      el.dataset.mounted = 'true';
+      const item = artifacts.get(el.dataset.artifact), preview = el.querySelector('.artifact-preview');
+      const cached = diagrams.get(item.source);
+      if (cached) { preview.innerHTML = cached; continue; }
+      const id = s.id;
+      R.diagram(item.source).then(svg => {
+        if (id !== result?.id) return;
+        diagrams.set(item.source, svg);
+        if (!el.isConnected) return;
+        remember(); preview.innerHTML = svg;
+        if (follow && active()) scroller.scrollTop = scroller.scrollHeight; else restore();
+      }).catch(() => { if (el.isConnected) preview.textContent = '图形未能预览，仍可复制或导出源码。'; });
     }
   }
   $('#copy-summary').disabled = !hasText; $('#export-summary').disabled = !hasText;
   $('#output-note').textContent = s?.chars ? `${s.chars.toLocaleString()} 字符 · ${s.phase === 'complete' ? '仅基于本页' : '部分结果'}` : '仅基于当前网页';
-  if (hasText && follow && ['streaming', 'complete'].includes(s.phase)) scroller.scrollTop = scroller.scrollHeight; else restore();
+  if (hasText && s.phase === 'streaming') followedStream = true;
+  if (hasText && follow && (s.phase === 'streaming' || (s.phase === 'complete' && followedStream))) scroller.scrollTop = scroller.scrollHeight;
+  else restore();
   $('#new-output').hidden = !hasText || !active() || follow;
 }
 function schedule() { if (!frame) frame = requestAnimationFrame(render); }
 function accept(next) {
-  if (next?.id !== result?.id) { remember(); doc.replaceChildren(); scroller.dataset.resultId = ''; sourceViews.clear(); view = 'content'; follow = true; scroller.scrollTop = 0; }
+  if (next?.id !== result?.id) { remember(); doc.replaceChildren(); scroller.dataset.resultId = ''; sourceViews.clear(); diagrams.clear(); view = 'content'; follow = true; followedStream = false; scroller.scrollTop = 0; }
   result = next; schedule();
 }
 function panelMessage(type) { try { port?.postMessage({ type, tabId, visible: document.visibilityState === 'visible' }); } catch {} }
@@ -96,7 +118,7 @@ async function copy(text) {
 function download(text, name, type = 'text/plain;charset=utf-8') {
   const url = URL.createObjectURL(new Blob([text], { type })), anchor = document.createElement('a'); anchor.href = url; anchor.download = name; document.body.append(anchor); anchor.click(); anchor.remove(); setTimeout(() => URL.revokeObjectURL(url), 2000);
 }
-function markdown() { return `# ${result.source?.title || '网页总结'}\n\n> 来源：${result.source?.url || ''}\n> 总结方式：${SUMMARY_PRESETS[result.chosen || result.preset]?.name || '通用总结'}\n> ${result.phase === 'complete' ? '已完成' : '部分结果'}${result.truncated ? '；资料已截取' : ''}\n\n${result.text}`; }
+function markdown() { return `# ${result.source?.title || '网页总结'}\n\n> 来源：${result.source?.url || ''}\n> 总结方式：${SUMMARY_PRESETS[result.chosen || result.preset]?.name || '通用总结'}\n> ${result.phase === 'complete' ? '已完成' : '部分结果'}${result.truncated ? '；资料已截取' : ''}${result.fallback ? '；主题识别已回退' : ''}\n\n${result.text}`; }
 async function html() {
   const parsed = R.parse(markdown(), { streaming: result.phase !== 'complete' }), holder = document.createElement('div'); holder.innerHTML = parsed.html;
   for (const item of parsed.artifacts) {
@@ -107,11 +129,11 @@ async function html() {
 }
 const codeExtension = item => ({ javascript: 'js', typescript: 'ts', python: 'py', json: 'json', css: 'css', bash: 'sh', sh: 'sh', html: 'txt' })[item.lang] || 'txt';
 function exportMenu(button, item) {
-  exportTarget = item || null;
+  exportTarget = item || null; exportTrigger = button;
   const formats = !item ? [['md', 'Markdown（.md）'], ['html', '可阅读文档（.html）']] : item.kind === 'mermaid' ? [['mmd', 'Mermaid 源码（.mmd）'], ['svg', '图形（.svg）']] : item.kind === 'table' ? [['csv', '表格（.csv）'], ['md', '表格源码（.md）']] : item.kind === 'math' ? [['tex', '公式源码（.tex）']] : [['code', `代码（.${codeExtension(item)}）`]];
   const menu = $('#export-menu'); menu.replaceChildren();
   for (const [format, text] of formats) { const choice = document.createElement('button'); choice.type = 'button'; choice.dataset.format = format; choice.textContent = text; menu.append(choice); }
-  const rect = button.getBoundingClientRect(); menu.style.left = `${Math.max(8, Math.min(innerWidth - 195, rect.right - 190))}px`; menu.style.top = `${Math.max(8, rect.top - formats.length * 38 - 16)}px`; menu.showPopover();
+  const rect = button.getBoundingClientRect(); menu.style.left = `${Math.max(8, Math.min(innerWidth - 195, rect.right - 190))}px`; menu.style.top = `${Math.max(8, rect.top - formats.length * 38 - 16)}px`; menu.showPopover(); menu.querySelector('button')?.focus();
 }
 async function exportFile(format) {
   $('#export-menu').hidePopover(); const item = exportTarget;
@@ -121,10 +143,20 @@ async function exportFile(format) {
   else download(item.source, `点译-制品.${format === 'code' ? codeExtension(item) : format}`);
   toast('已导出');
 }
+$('#export-menu').addEventListener('toggle', event => {
+  if (event.newState === 'closed' && (document.activeElement === document.body || $('#export-menu').contains(document.activeElement))) exportTrigger?.focus();
+});
+$('#export-menu').addEventListener('keydown', event => {
+  if (!['ArrowDown', 'ArrowUp', 'Home', 'End'].includes(event.key)) return;
+  event.preventDefault();
+  const choices = [...event.currentTarget.querySelectorAll('button')], index = choices.indexOf(document.activeElement);
+  const next = event.key === 'Home' ? 0 : event.key === 'End' ? choices.length - 1 : (index + (event.key === 'ArrowDown' ? 1 : -1) + choices.length) % choices.length;
+  choices[next]?.focus();
+});
 document.addEventListener('click', event => {
   const button = event.target.closest('button'); if (!button) return;
   (async () => {
-    if (button.dataset.view) { remember(); view = button.dataset.view; follow = false; render(); }
+    if (button.dataset.view) { if (view === button.dataset.view) return; view = button.dataset.view; follow = false; render(); }
     else if (button.dataset.format) await exportFile(button.dataset.format);
     else if (button.dataset.artifactAction) {
       const item = artifacts.get(button.dataset.id); if (!item) return;

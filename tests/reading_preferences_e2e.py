@@ -60,7 +60,9 @@ try:
                 result=ui.evaluate('data=>chrome.runtime.sendMessage(data)',{'type':'SHIYI/'+kind,**payload});assert result['ok'],result;return result['data']
             def save():
                 ui.get_by_role('button',name='保存偏好',exact=True).click();expect(ui.locator('#notice')).to_contain_text('翻译偏好已保存');expect(ui.get_by_role('button',name='保存偏好',exact=True)).to_be_enabled()
-            def batch_size(size):ui.get_by_label('每批翻译块数',exact=True).fill(str(size));save()
+            def batch_size(size):
+                if not ui.locator('#reading-advanced').evaluate('node=>node.open'): ui.locator('#reading-advanced summary').click()
+                ui.get_by_label('每批翻译块数',exact=True).fill(str(size));save()
             profile={'provider':'custom','name':'Local settings fixture','endpoint':origin+'/v1/chat/completions','model':'prefs-default','auth':'none','timeoutSeconds':5,'rememberKey':False}
             def model(name):message('SAVE_PROFILE',profile={**profile,'model':name})
             model('prefs-default')
@@ -110,7 +112,7 @@ try:
             article.evaluate('window.fontTestNode=document.querySelector("#p0 + [data-shiyi-block-translation]")')
             for reduction in [2,4,0]:
                 ui.get_by_label('双语译文字号',exact=True).select_option(str(reduction))
-                expect(ui.locator('#color-light-preview .preview-translation')).to_have_css('font-size',str(16-reduction)+'px')
+                expect(ui.locator('.font-preview span').last).to_have_css('font-size',str(16-reduction)+'px')
                 save();expect(original_node).to_have_css('font-size',str(16-reduction)+'px')
                 for tag in ['a','em','code']:
                     size=article.locator('#p0 '+tag).evaluate('n=>parseFloat(getComputedStyle(n).fontSize)')
@@ -126,6 +128,7 @@ try:
             assert len(calls)==before
             ui.get_by_label('双语译文字号',exact=True).select_option('0');save();expect(article.locator('#p0 + [data-shiyi-block-translation]')).to_have_css('font-size','16px')
             passed('Font choices repaint existing nodes without model calls; translation-only retains original sizes and reload restores the saved choice with cached translations')
+            if not ui.locator('#reading-advanced').evaluate('node=>node.open'): ui.locator('#reading-advanced summary').click()
             ui.get_by_role('button',name='浅色页面：蓝色',exact=True).click();ui.get_by_role('button',name='深色页面：浅蓝',exact=True).click()
             expect(ui.get_by_label('浅色页面取色器',exact=True)).to_have_value('#1d4ed8');expect(ui.get_by_label('深色页面颜色值',exact=True)).to_have_value('#bfdbfe')
             ui.get_by_label('浅色页面颜色值',exact=True).fill('#aa22cc')

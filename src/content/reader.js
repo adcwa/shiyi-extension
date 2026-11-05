@@ -458,7 +458,7 @@
     function command(action, value) {
       if (action === 'translate') return active ? (setMode(value || mode), run(true, true), status()) : start({ mode: value });
       if (action === 'retranslate') return start({ mode: value || mode, fresh: true });
-      if (action === 'load-local') return restoreCached(true);
+      if (action === 'load-local') return restoreCached(true, value);
       if (action === 'mode') return setMode(value);
       if (action === 'restore') {
         const handle = pageHandle, previousMode = mode, result = restore();
@@ -469,7 +469,7 @@
       if (['resume', 'retry'].includes(action)) { run(true, true); return status(); }
       return status();
     }
-    async function restoreCached(manual = false) {
+    async function restoreCached(manual = false, preferredMode) {
       if (active) return status();
       const url = location.href, signature = bridge.signature(), lookup = ++lookupRevision; localLoading = true; emit();
       try {
@@ -478,9 +478,10 @@
         cachedCount = page?.blocks?.length || 0;
         if (page && cachedCount && (manual || page.enabled)) {
           writerReady = false;
-          if (manual) await bridge.send('PAGE_CACHE_STATE', { url, id: page.id, revision: page.revision, mode: page.mode, enabled: true });
+          const savedMode = preferredMode || page.mode;
+          if (manual) await bridge.send('PAGE_CACHE_STATE', { url, id: page.id, revision: page.revision, mode: savedMode, enabled: true });
           if (active || url !== location.href || lookup !== lookupRevision || signature !== bridge.signature()) return status();
-          start({ mode: page.mode, snapshot: page, localOnly: true });
+          start({ mode: savedMode, snapshot: page, localOnly: true });
         }
       } catch { if (lookup === lookupRevision) cachedCount = 0; }
       finally { if (lookup === lookupRevision) { localLoading = false; emit(); } }

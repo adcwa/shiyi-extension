@@ -14,6 +14,7 @@ export function summaryPanelTab(path) {
 // use the automatic policy; merely restoring a panel must not spend model quota.
 export function createSummaryPanel({ chromeApi, settings, tabState, summaries, whenReady }) {
   const ports = new Set(), timers = new Map(), selections = new Map(), revisions = new Map();
+  const edge = /\bEdg\//.test(globalThis.navigator?.userAgent || ''), denied = new Set();
   const visible = tabId => [...ports].some(port => port.summaryPanelTab === tabId && port.summaryVisible);
   const cancelTimer = tabId => { clearTimeout(timers.get(tabId)); timers.delete(tabId); };
 
@@ -22,9 +23,12 @@ export function createSummaryPanel({ chromeApi, settings, tabState, summaries, w
     const value = await settings.config(), state = await tabState(tabId, value);
     if (revisions.get(tabId) !== revision) return null;
     const enabled = !!state?.enabled;
+    if (edge) { if (enabled) denied.delete(tabId); else denied.add(tabId); }
     if (!enabled) summaries.invalidate(tabId, state?.blocked ? '此网站已加入黑名单，生成已停止。' : '网页访问权限已变更，生成已停止。');
-    const desired = { tabId, path: summaryPanelPath(tabId), enabled };
-    const current = await chromeApi.sidePanel.getOptions({ tabId });
+    const current = await chromeApi.sidePanel.getOptions({ tabId }), path = summaryPanelPath(tabId);
+    // Edge inherits the open sidebar container across tabs with enabled
+    // options. An unopened tab receives its path but stays disabled.
+    const desired = { tabId, path, enabled: enabled && (!edge || current.path === path && current.enabled === true) };
     if (revisions.get(tabId) !== revision) return null;
     // Chrome closes the visible window panel when an open background entry is
     // disabled (even with a tabId). Stop its job immediately, but apply native
@@ -58,6 +62,15 @@ export function createSummaryPanel({ chromeApi, settings, tabState, summaries, w
   function open(tabId, preset) {
     assert(Number.isInteger(tabId) && tabId >= 0, 'INVALID_INPUT', '请选择需要总结的网页。');
     if (preset) selections.set(tabId, preset);
+    if (edge) {
+      assert(!denied.has(tabId), 'SITE_DISABLED', '当前网页未允许打开总结侧栏。');
+      revisions.set(tabId, (revisions.get(tabId) || 0) + 1);
+      // Queue both browser calls in the same user gesture. Waiting for the
+      // option update would lose the activation needed to open the sidebar.
+      const enabled = chromeApi.sidePanel.setOptions({ tabId, path: summaryPanelPath(tabId), enabled: true });
+      const opening = chromeApi.sidePanel.open({ tabId });
+      return Promise.all([enabled, opening]).then(() => summarize(tabId, true));
+    }
     // Must be the first browser API call in the gesture; awaiting setup here
     // loses Chrome's user activation and can close the popup without opening.
     return chromeApi.sidePanel.open({ tabId }).then(() => summarize(tabId, true));
@@ -85,7 +98,7 @@ export function createSummaryPanel({ chromeApi, settings, tabState, summaries, w
     }
   });
   chromeApi.tabs.onRemoved.addListener(tabId => {
-    cancelTimer(tabId); selections.delete(tabId); revisions.delete(tabId); summaries.remove(tabId);
+    cancelTimer(tabId); selections.delete(tabId); revisions.delete(tabId); denied.delete(tabId); summaries.remove(tabId);
     for (const port of ports) if (port.summaryPanelTab === tabId) port.summaryVisible = false;
   });
   // Newer browsers retain panel documents when hidden. Older supported builds

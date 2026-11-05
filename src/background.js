@@ -309,7 +309,7 @@ async function handle(message, sender) {
     }
     case 'SHIYI/OPEN_OPTIONS': {
       if (!trusted(sender)) await requireContent(sender);
-      const section = ['library', 'trails','reviews','translation', 'model', 'summary', 'sites', 'data', 'help', 'about'].includes(message.section) ? message.section : 'library';
+      const section = ['library', 'trails','reviews','translation', 'model', 'model-summary', 'summary', 'sites', 'data', 'help', 'about'].includes(message.section) ? message.section : 'library';
       const query = typeof message.entryId === 'string' ? `?entry=${encodeURIComponent(message.entryId.slice(0, 80))}` : '';
       await chrome.tabs.create({ url: chrome.runtime.getURL(`options.html${query}#${section}`) }); return {};
     }
@@ -458,7 +458,7 @@ chrome.contextMenus.onClicked.addListener((info, tab) => {
 chrome.runtime.onInstalled.addListener(details => {
   ready.then(async () => {
     await injectExisting();
-    if (details.reason === 'install') await chrome.tabs.create({ url: chrome.runtime.getURL('options.html#model') });
+    if (details.reason === 'install') await chrome.tabs.create({ url: chrome.runtime.getURL('options.html#library') });
   }).catch(() => {});
 });
 chrome.runtime.onStartup.addListener(() => ready.then(syncScripts).catch(() => {}));

@@ -37,6 +37,8 @@ export function createKnowledgeManager({ chromeApi, settings, repository, permis
   function stateFor(tabId) {
     const binding = bindings.get(tabId), visit = tables.visits.get(binding?.visitId);
     const summary = tables.summaries.get(visit?.summaryId);
+    const saved = !summary && !visit?.error && tables.summaries.get(binding?.savedSummaryId);
+    if (saved?.phase === 'complete' && !saved.invalidated) return { ...saved, tabId, localPreview: true };
     if (summary) return { ...summary, automaticDisabled:!automaticEnabled&&automatic(summary),tabId, source: visit.source, chars: summary.chars || 0, stale: false,...(visit.error?{phase:'error',error:visit.error}:{}) };
     if (visit) return { id: visit.id, tabId, source: visit.source, phase: visit.error ? 'error' : 'waiting', text: '', error: visit.error || '', chars: 0, preset: 'general',automaticDisabled:!automaticEnabled };
     return null;
@@ -63,7 +65,21 @@ export function createKnowledgeManager({ chromeApi, settings, repository, permis
   }
   async function captureTab(tabId, options = {}) {
     const context = await begin(tabId, options); if (!context) return { started: false };
-    if(!options.manual&&!prefs(await config()).autoSummary){publish();return{started:false,automaticDisabled:true};}
+    if (!options.manual) {
+      const value = await config();
+      if (!prefs(value).autoSummary) {
+        // The visible panel can show a prior saved visit without reading the
+        // current document or scheduling a background request while disabled.
+        if (options.panel && !tables.visits.get(context.binding.visitId)?.summaryId) {
+          const previous = rows('visits').filter(visit => visit.identity === context.binding.identity && visit.summaryId)
+            .sort((a, b) => b.visitedAt - a.visitedAt)
+            .map(visit => tables.summaries.get(visit.summaryId))
+            .find(summary => summary?.phase === 'complete' && !summary.invalidated && valid(summary, value));
+          context.binding.savedSummaryId = previous && await accessible(previous) ? previous.id : undefined;
+        }
+        publish(); return { started: false, automaticDisabled: true };
+      }
+    }
     if (context.tab.status === 'loading' && !options.documentReady) return { started: false };
     const previous = captures.get(tabId);
     if (previous?.binding === context.binding) {if(!options.manual)return previous.task;await previous.task;return captureTab(tabId,options);}
@@ -384,7 +400,7 @@ export function createKnowledgeManager({ chromeApi, settings, repository, permis
     started=true;await chromeApi.alarms.create('dianyi-knowledge-queue',{periodInMinutes:1});await runDue({catchup:true});void pump();
   }
   return { initialize, begin, captureTab, restrict, resume, runDue, pump, createReview,list, detail, updateVisit, remove,clear, exportData, retry, stop,setAutomatic,
-    start: (tabId,preset)=>captureTab(tabId,{preset,force:true,manual:true,documentReady:true}), ensure:(tabId,preset,options={})=>captureTab(tabId,{preset,manual:!!options.manual,documentReady:true}),
+    start: (tabId,preset)=>captureTab(tabId,{preset,force:true,manual:true,documentReady:true}), ensure:(tabId,preset,options={})=>captureTab(tabId,{preset,manual:!!options.manual,documentReady:true,panel:true}),
     snapshot: async tabId=>{await loaded;return stateFor(tabId);},
     connect(port,tabId) { port.summaryTab=tabId;ports.add(port);port.onMessage.addListener(message=>{if(message?.type==='bind'&&message.tabId===tabId)loaded.then(publish);});port.onDisconnect.addListener(()=>ports.delete(port)); },
     cancelAll(reason) { for(const id of running.keys())stop(id,reason); }, invalidate:()=>{}, removeTab:tabId=>bindings.delete(tabId),

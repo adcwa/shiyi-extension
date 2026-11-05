@@ -7,6 +7,7 @@ from pathlib import Path
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from threading import Thread
 from playwright.sync_api import sync_playwright, expect
+from browser_binary import browser_binary
 import json, os, tempfile, time, zipfile, subprocess, sys
 
 ROOT=Path(__file__).resolve().parents[1]
@@ -35,7 +36,7 @@ server=ThreadingHTTPServer(('127.0.0.1',0),Handler);Thread(target=server.serve_f
 try:
  with tempfile.TemporaryDirectory(prefix='dianyi-shared-upgrade-') as directory,sync_playwright() as p:
   directory=Path(directory);extension=directory/'extension';profile_dir=directory/'profile'
-  binary=os.environ.get('SHIYI_TEST_CHROMIUM') or str(Path.home()/'Library/Caches/ms-playwright/chromium-1234/chrome-mac-arm64/Google Chrome for Testing.app/Contents/MacOS/Google Chrome for Testing')
+  binary=os.environ.get('SHIYI_TEST_CHROMIUM') or str(browser_binary())
   def launch(path=extension,profile=profile_dir):
    return p.chromium.launch_persistent_context(str(profile),executable_path=binary,headless=True,ignore_default_args=['--disable-extensions'],args=['--disable-extensions-except='+str(path),'--load-extension='+str(path)],viewport={'width':1440,'height':1000},accept_downloads=True)
   with zipfile.ZipFile(ROOT/'releases/dianyi-chrome-edge-0.13.0.zip') as z:z.extractall(extension)
@@ -93,6 +94,7 @@ try:
    passed('same-directory ZIP upgrade preserves extension identity, original vocabulary IDs, both model choices and local keys')
    expect(ui.locator('.page-heading h1')).to_have_text('模型库');assert ui.locator('#model-form').count()==0
    ui.goto(f'chrome-extension://{ext}/options.html#summary');assert ui.locator('#model-form,#model-key').count()==0
+   ui.get_by_role('link',name='选择总结模型',exact=True).click()
    before=len(calls);ui.locator('#scene-summary-model').select_option(old_translation);wait(lambda:api('UI_STATE')['summaryProfile']['connectionId']==old_translation);assert len(calls)==before
    state=api('UI_STATE');assert state['summaryProfile']['hasKey'];assert state['summaryProfile']['connectionId']==state['profile']['connectionId']
    passed('summary and periodic scenes select an existing model with no duplicate configuration, Key entry or test request')
@@ -102,7 +104,7 @@ try:
    ui.get_by_role('button',name='添加模型',exact=True).click();ui.get_by_role('button',name='自定义服务',exact=True).click();ui.locator('#model-name').fill('Backup model');ui.locator('#model-endpoint').fill(origin+'/v1');ui.locator('#model-id').fill('backup-model');ui.locator('#model-key').fill('backup-fixture');expect(ui.locator('#remember-key')).to_be_checked();ui.get_by_role('button',name='连接并保存',exact=True).click();expect(ui.locator('#connection-result')).to_contain_text('已连接并保存')
    backup=next(i['id'] for i in api('UI_STATE')['modelLibrary']['items'] if i['profile']['name']=='Backup model')
    ui.locator('#scene-translation-model').select_option(backup);wait(lambda:api('UI_STATE')['profile']['connectionId']==backup);assert api('UI_STATE')['summaryProfile']['connectionId']==old_translation
-   ui.goto(f'chrome-extension://{ext}/options.html#summary');ui.locator('#scene-summary-backup').select_option(backup);wait(lambda:any(i['id']==backup and i['backup'] for i in api('UI_STATE')['modelConnections']['summary']['items']))
+   ui.goto(f'chrome-extension://{ext}/options.html#model-summary');ui.locator('#scene-summary-backup').select_option(backup);wait(lambda:any(i['id']==backup and i['backup'] for i in api('UI_STATE')['modelConnections']['summary']['items']))
    passed('models save locally once; scene defaults and explicitly selected backups remain independent')
    mt=api('MODEL_LIBRARY_SAVE',profile={'provider':'qwen','model':'qwen-mt-flash','rememberKey':False},apiKey='unrequested-mt-fixture',connectionId=None)['id'];ui.reload();expect(ui.locator('#scene-summary-model option[value="'+mt+'"]').first).to_be_disabled()
    passed('translation-only models remain in the shared library but cannot be selected for summary')
@@ -120,18 +122,18 @@ try:
    target=a.locator('#target');target.scroll_into_view_if_needed();box=target.evaluate('n=>{const r=document.createRange();r.selectNodeContents(n);const b=r.getBoundingClientRect();return{x:b.x,y:b.y,w:b.width,h:b.height}}');a.mouse.move(box['x']+.3,box['y']+box['h']/2);a.mouse.down();a.mouse.move(box['x']+box['w']-.3,box['y']+box['h']/2,steps=15);a.mouse.up();a.locator('#shiyi-extension-root .selection-main').click();wait(lambda:any(e['text']=='resilience' for e in api('LIBRARY')['entries']));assert calls[-1]['authorization']=='Bearer primary-shared-fixture';assert api('UI_STATE')['vocabularyBackup']['count']==3
    passed('actual page summary and pointer-selected translation both use the single saved credential; new words update the local copy')
    b=context.new_page();b.goto(origin+'/article-b');wait(lambda:any(i['phase']=='complete' and 'article-b' in i['title'] for i in api('KNOWLEDGE_LIST')['items']))
-   ui.goto(f'chrome-extension://{ext}/options.html#trails');expect(ui.locator('.knowledge-row')).to_have_count(2);assert ui.get_by_role('button',name='筛选',exact=True).count()==0
+   ui.goto(f'chrome-extension://{ext}/options.html#trails');expect(ui.locator('.knowledge-row')).to_have_count(2);expect(ui.locator('[data-k=toggle-filters]')).to_have_attribute('aria-expanded','false')
    before=len(calls);ui.locator('#knowledge-query').fill('article');ui.locator('#knowledge-query').fill('article-b');ui.wait_for_timeout(120);expect(ui.locator('.knowledge-row')).to_have_count(2);expect(ui.locator('.knowledge-row')).to_have_count(1);expect(ui.locator('.knowledge-row')).to_contain_text('article-b');assert len(calls)==before
    ui.locator('#knowledge-query').fill('');expect(ui.locator('.knowledge-row')).to_have_count(2)
    ui.locator('#knowledge-query').evaluate("n=>{n.value='article-b';n.dispatchEvent(new InputEvent('input',{bubbles:true,isComposing:true}));}");ui.wait_for_timeout(500);expect(ui.locator('.knowledge-row')).to_have_count(2);ui.locator('#knowledge-query').dispatch_event('compositionend');expect(ui.locator('.knowledge-row')).to_have_count(1)
    passed('trajectory search debounces typing, waits for IME composition, supports clearing, and never requests a model')
-   ui.get_by_role('button',name='重置',exact=True).click();ui.locator('.knowledge-row').first.click();ui.locator('#knowledge-note-project').fill('Local project');ui.get_by_role('button',name='保存备注',exact=True).click();expect(ui.locator('#notice')).to_contain_text('阅读备注已保存');ui.locator('#knowledge-project').select_option('Local project');expect(ui.locator('.knowledge-row')).to_have_count(1)
+   ui.locator('[data-k=toggle-filters]').click();ui.get_by_role('button',name='清除筛选',exact=True).click();expect(ui.locator('.knowledge-row')).to_have_count(2);ui.locator('.knowledge-row').first.click();ui.locator('#knowledge-note-project').fill('Local project');ui.get_by_role('button',name='保存备注',exact=True).click();expect(ui.locator('#notice')).to_contain_text('阅读备注已保存');ui.locator('#knowledge-project').select_option('Local project');expect(ui.locator('.knowledge-row')).to_have_count(1)
    ui.locator('#notice').evaluate('n=>n.replaceChildren()');ui.evaluate('window.scrollTo(0,0)');ui.screenshot(path=str(SHOTS/'trails-desktop.png'),full_page=True)
    passed('project filter changes update results immediately without a Filter button')
    day=api('KNOWLEDGE_REVIEW',kind='analysis',dimension='Shared model review');wait(lambda:any(i['id']==day['id'] and i['phase']=='complete' for i in api('KNOWLEDGE_LIST',view='reviews')['items']))
    ui.goto(f'chrome-extension://{ext}/options.html#reviews');before=len(calls);ui.locator('#knowledge-query').fill('no-match-for-review');expect(ui.locator('.knowledge-row')).to_have_count(0);ui.locator('#knowledge-query').fill('');expect(ui.locator('.knowledge-row')).to_have_count(1);assert len(calls)==before
    passed('review search shares automatic delayed retrieval and clearing, without generating a new review')
-   ui.locator('#knowledge-query').fill('Article');ui.locator('#knowledge-kind').select_option('analysis');ui.get_by_role('button',name='生成回顾',exact=True).click();expect(ui.locator('.knowledge-detail-head')).to_be_visible();ui.wait_for_timeout(600);expect(ui.locator('.knowledge-detail-head')).to_be_visible();expect(ui.locator('.knowledge-detail-head>p').first).to_contain_text('已完成')
+   ui.locator('#knowledge-query').fill('Article');ui.locator('[data-k=generate-open]').click();ui.locator('#knowledge-kind').select_option('analysis');ui.locator('[data-k=generate]').click();expect(ui.locator('.knowledge-detail-head')).to_be_visible();ui.wait_for_timeout(600);expect(ui.locator('.knowledge-detail-head')).to_be_visible();expect(ui.locator('.knowledge-detail-head>p').first).to_contain_text('已完成')
    passed('explicit Generate applies the pending search range and retains the result instead of a delayed filter clearing it')
    ui.goto(f'chrome-extension://{ext}/options.html#library')
    with ui.expect_download() as download:ui.get_by_role('button',name='导出词库',exact=True).click()

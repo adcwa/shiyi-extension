@@ -3,6 +3,7 @@ from pathlib import Path
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from threading import Thread
 from playwright.sync_api import sync_playwright, expect
+from browser_binary import browser_binary
 import json, tempfile, time, zipfile, os
 
 ROOT=Path(__file__).resolve().parents[1];VERSION=json.loads((ROOT/'package.json').read_text())['version'];OUT=ROOT/'verification';OUT.mkdir(exist_ok=True)
@@ -28,8 +29,8 @@ try:
  with tempfile.TemporaryDirectory(prefix='dianyi-knowledge-') as temp,sync_playwright() as p:
   temp=Path(temp);extension=temp/'extension'
   with zipfile.ZipFile(ROOT/'releases'/f'dianyi-chrome-edge-{VERSION}.zip') as z:z.extractall(extension)
-  binary=Path.home()/'Library/Caches/ms-playwright/chromium-1234/chrome-mac-arm64/Google Chrome for Testing.app/Contents/MacOS/Google Chrome for Testing'
-  context=p.chromium.launch_persistent_context(str(temp/'profile'),executable_path=str(binary),headless=True,ignore_default_args=['--disable-extensions'],args=['--disable-extensions-except='+str(extension),'--load-extension='+str(extension)],viewport={'width':1440,'height':1000},accept_downloads=True)
+  binary=browser_binary()
+  context=p.chromium.launch_persistent_context(str(temp/'profile'),executable_path=binary,headless=True,ignore_default_args=['--disable-extensions'],args=['--disable-extensions-except='+str(extension),'--load-extension='+str(extension)],viewport={'width':1440,'height':1000},accept_downloads=True)
   try:
    worker=context.service_workers[0] if context.service_workers else context.wait_for_event('serviceworker');ext=worker.url.split('/')[2];ui=context.new_page();ui.on('pageerror',lambda e:errors.append(str(e)));ui.goto(f'chrome-extension://{ext}/options.html#summary');expect(ui.locator('h1')).to_have_text('总结设置')
    def api(kind,**fields):
@@ -58,7 +59,9 @@ try:
    screenshots=OUT/'knowledge-ui';screenshots.mkdir(exist_ok=True);ui.locator('#notice').evaluate('n=>n.replaceChildren()');ui.locator('#knowledge-note').screenshot(path=str(screenshots/'remark-draft.png'))
    ui.goto(f'chrome-extension://{ext}/options.html#reviews');expect(ui.get_by_role('heading',name='阅读回顾',exact=True)).to_be_visible();ui.goto(f'chrome-extension://{ext}/options.html#trails');ui.locator('[data-k-id="'+draft_id+'"]').click();expect(ui.locator('#knowledge-note-text')).to_have_value('尚未保存的阅读想法');ui.get_by_role('button',name='丢弃修改',exact=True).click();expect(ui.locator('#knowledge-note-text')).to_have_value('核对原文实现边界。')
    passed('unsaved remark drafts survive background refresh, blur and route changes until explicitly discarded')
-   ui.locator('#knowledge-project').select_option('Research');expect(ui.locator('.knowledge-row')).to_have_count(1);ui.locator('.knowledge-row').first.click();expect(ui.locator('[data-kind="mermaid"] svg')).to_have_count(1)
+   ui.locator('[data-k=toggle-filters]').click();ui.locator('#knowledge-project').select_option('Research');expect(ui.locator('.knowledge-row')).to_have_count(1);ui.locator('.knowledge-row').first.click();expect(ui.locator('[data-kind="mermaid"] svg')).to_have_count(1)
+   expect(ui.get_by_role('button',name='移除项目 Research')).to_be_visible()
+   ui.locator('[data-k=toggle-filters]').click();expect(ui.locator('#knowledge-project')).not_to_be_visible()
    passed('project, tags and notes persist and participate in real trajectory filters')
    screenshots=OUT/'knowledge-ui';screenshots.mkdir(exist_ok=True)
    ui.evaluate('window.scrollTo(0,0)');ui.wait_for_timeout(300);ui.locator('#notice').evaluate('n=>n.replaceChildren()');assert ui.locator('[data-kind="mermaid"] svg').bounding_box()['width']>100;ui.screenshot(path=str(screenshots/'desktop.png'),full_page=True)
@@ -80,12 +83,12 @@ try:
    ui.goto(f'chrome-extension://{ext}/options.html#reviews');expect(ui.get_by_role('heading',name='阅读回顾',exact=True)).to_be_visible()
    today=ui.locator('#knowledge-date').input_value()
    for kind in ['day','week','month','year','analysis']:
-    ui.locator('#knowledge-kind').select_option(kind);ui.get_by_role('button',name='生成回顾',exact=True).click();expect(ui.locator('.knowledge-detail-head')).to_be_visible();wait(lambda:any(r['kind']==kind and r['phase']=='complete' for r in api('KNOWLEDGE_LIST',view='reviews')['items']),30)
+    ui.locator('[data-k=generate-open]').click();ui.locator('#knowledge-kind').select_option(kind);ui.locator('[data-k=generate]').click();expect(ui.locator('.knowledge-detail-head')).to_be_visible();wait(lambda:any(r['kind']==kind and r['phase']=='complete' for r in api('KNOWLEDGE_LIST',view='reviews')['items']),30)
    passed('day, week, month, year and thematic reviews all execute the real model pipeline and persist')
    ui.locator('#knowledge-kind-filter').select_option('year');expect(ui.locator('.knowledge-row')).to_have_count(1);ui.locator('.knowledge-row').first.click();expect(ui.locator('.knowledge-doc')).to_contain_text('本地阅读总结');assert ui.locator('.knowledge-sources [data-k-source]').count()>=1
    ui.locator('#notice').evaluate('n=>n.replaceChildren()');ui.screenshot(path=str(screenshots/'reviews-desktop.png'),full_page=True)
    passed('period filtering and evidence navigation expose the source chain of yearly analysis')
-   ui.goto(f'chrome-extension://{ext}/options.html#summary');ui.locator('#knowledge-time').fill('19:20');ui.locator('#knowledge-zone').fill('Asia/Tokyo');ui.get_by_role('button',name='保存回顾设置',exact=True).click();expect(ui.locator('#notice')).to_contain_text('回顾设置已保存');config=api('UI_STATE');assert config['knowledgePrefs']['time']=='19:20' and config['knowledgePrefs']['timeZone']=='Asia/Tokyo'
+   ui.goto(f'chrome-extension://{ext}/options.html#summary');ui.locator('#review-advanced > summary').click();ui.locator('#knowledge-time').fill('19:20');ui.locator('#knowledge-zone').fill('Asia/Tokyo');ui.get_by_role('button',name='保存回顾设置',exact=True).click();expect(ui.locator('#notice')).to_contain_text('回顾设置已保存');config=api('UI_STATE');assert config['knowledgePrefs']['time']=='19:20' and config['knowledgePrefs']['timeZone']=='Asia/Tokyo'
    alarm=worker.evaluate('()=>chrome.alarms.get("dianyi-knowledge-daily")');assert alarm and alarm['scheduledTime']>time.time()*1000
    passed('real settings save time/timezone and recreate the durable daily browser alarm')
    before=len(calls);api('BLACKLIST_SET',site=other,blocked=True);blocked=context.new_page();blocked.goto(other+'/blocked');ui.wait_for_timeout(800);assert len(calls)==before
@@ -99,7 +102,7 @@ try:
    api('KNOWLEDGE_PREFS',prefs={'time':'00:00','timeZone':'Asia/Shanghai','prompts':{}});before=len(calls);worker.evaluate('()=>chrome.alarms.create("dianyi-knowledge-daily",{when:Date.now()+300})');wait(lambda:len(calls)>before,45);wait(lambda:api('KNOWLEDGE_LIST',view='reviews')['items'][0]['phase']=='complete',20)
    passed('a real Chrome alarm event invokes the scheduled daily model pipeline and persists its result')
    count=api('KNOWLEDGE_LIST')['total'];before=len(calls);context.close()
-   context=p.chromium.launch_persistent_context(str(temp/'profile'),executable_path=str(binary),headless=True,ignore_default_args=['--disable-extensions'],args=['--disable-extensions-except='+str(extension),'--load-extension='+str(extension)],viewport={'width':1440,'height':1000})
+   context=p.chromium.launch_persistent_context(str(temp/'profile'),executable_path=binary,headless=True,ignore_default_args=['--disable-extensions'],args=['--disable-extensions-except='+str(extension),'--load-extension='+str(extension)],viewport={'width':1440,'height':1000})
    worker=context.service_workers[0] if context.service_workers else context.wait_for_event('serviceworker');ui=context.new_page();ui.goto(f'chrome-extension://{ext}/options.html#trails');expect(ui.get_by_role('heading',name='我的轨迹',exact=True)).to_be_visible();assert api('KNOWLEDGE_LIST')['total']==count;ui.wait_for_timeout(600);assert len(calls)==before
    passed('full browser shutdown and restart preserves IndexedDB history and completed results without re-billing')
    assert not errors,errors

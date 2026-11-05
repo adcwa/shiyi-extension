@@ -3,6 +3,7 @@ from pathlib import Path
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from threading import Thread, Lock
 from playwright.sync_api import sync_playwright, expect
+from browser_binary import browser_binary
 import json, tempfile, time, os, zipfile
 
 ROOT=Path(__file__).resolve().parents[1]
@@ -46,25 +47,25 @@ class Handler(BaseHTTPRequestHandler):
 def passed(name,detail=None):
  report['checks'].append({'name':name,'result':'pass',**({'detail':detail} if detail else {})});print('PASS:',name,flush=True)
 server=ThreadingHTTPServer(('127.0.0.1',0),Handler);Thread(target=server.serve_forever,daemon=True).start();origin='http://127.0.0.1:'+str(server.server_port)
-browser=Path.home()/'Library/Caches/ms-playwright/chromium-1234/chrome-mac-arm64/Google Chrome for Testing.app/Contents/MacOS/Google Chrome for Testing'
+browser=browser_binary()
 try:
  with tempfile.TemporaryDirectory(prefix='dianyi-summary-') as temp,sync_playwright() as p:
   temp=Path(temp);extension=temp/'extension'
   with zipfile.ZipFile(ROOT/'releases'/('dianyi-chrome-edge-'+VERSION+'.zip')) as z:z.extractall(extension)
-  context=p.chromium.launch_persistent_context(str(temp/'profile'),executable_path=str(browser),headless=os.environ.get('DIANYI_HEADED')!='1',ignore_default_args=['--disable-extensions'],args=['--disable-extensions-except='+str(extension),'--load-extension='+str(extension)],viewport={'width':1200,'height':900},accept_downloads=True)
+  context=p.chromium.launch_persistent_context(str(temp/'profile'),executable_path=browser,headless=os.environ.get('DIANYI_HEADED')!='1',ignore_default_args=['--disable-extensions'],args=['--disable-extensions-except='+str(extension),'--load-extension='+str(extension)],viewport={'width':1200,'height':900},accept_downloads=True)
   try:
    worker=context.service_workers[0] if context.service_workers else context.wait_for_event('serviceworker');ext=worker.url.split('/')[2]
    ui=context.new_page();ui.on('pageerror',lambda e:errors.append(str(e)));ui.goto('chrome-extension://'+ext+'/options.html#summary')
-   expect(ui.get_by_role('heading',name='总结设置',exact=True)).to_be_visible();expect(ui.locator('#current-model')).to_have_text('qwen-flash')
+   expect(ui.get_by_role('heading',name='总结设置',exact=True)).to_be_visible();ui.get_by_role('link',name='选择总结模型',exact=True).click();expect(ui.locator('#current-model')).to_have_text('qwen-flash')
    def message(kind,**payload):
     reply=ui.evaluate('data=>chrome.runtime.sendMessage(data)',{'type':'SHIYI/'+kind,**payload});assert reply.get('ok'),reply;return reply['data']
    original=message('UI_STATE')['profile'];assert not message('UI_STATE')['summaryProfile']['configured'];assert len(calls)==0
-   ui.get_by_role('button',name='自定义服务',exact=True).click();ui.get_by_label('服务地址',exact=True).fill(origin+'/v1');ui.get_by_label('模型名称',exact=True).fill('summary-fixture');ui.get_by_label('API Key',exact=True).fill('summary-fixture-key');ui.get_by_role('button',name='连接并保存',exact=True).click()
+   ui.get_by_role('button',name='自定义服务',exact=True).click();ui.get_by_label('服务地址',exact=True).fill(origin+'/v1');ui.get_by_label('模型名称',exact=True).fill('summary-fixture');ui.get_by_label('API Key',exact=True).fill('summary-fixture-key');ui.locator('#connection-default').check();ui.get_by_role('button',name='连接并保存',exact=True).click()
    expect(ui.locator('#connection-result')).to_contain_text('已连接并保存',timeout=12000);state=message('UI_STATE');assert state['summaryProfile']['configured'] and state['summaryProfile']['hasKey'];assert state['profile']==original
    passed('independent summary setup validates actual SSE and preserves translation config')
    profile={'provider':'custom','name':'Translation fixture','endpoint':origin+'/v1','model':'translation-fixture','auth':'bearer','timeoutSeconds':5,'rememberKey':False}
    message('SAVE_PROFILE',profile=profile,apiKey='translation-fixture-key')
-   ui.locator('#prompt-technical').evaluate("n=>n.closest('details').open=true");ui.locator('#prompt-technical').fill('CUSTOM_TECHNICAL: 提炼技术步骤和依据。');ui.get_by_role('button',name='保存总结偏好',exact=True).click();expect(ui.locator('#notice')).to_contain_text('总结偏好已保存')
+   ui.goto('chrome-extension://'+ext+'/options.html#summary');ui.locator('#prompt-technical').evaluate("n=>n.closest('details').open=true");ui.locator('#prompt-technical').fill('CUSTOM_TECHNICAL: 提炼技术步骤和依据。');ui.get_by_role('button',name='保存总结偏好',exact=True).click();expect(ui.locator('#notice')).to_contain_text('总结偏好已保存')
    passed('summary prompts persist in original options entrance')
    article=context.new_page();article.on('pageerror',lambda e:errors.append(str(e)));article.goto(origin+'/article?private=hidden');expect(article.locator('#shiyi-extension-root')).to_be_attached()
    tab=ui.evaluate('async url=>(await chrome.tabs.query({})).find(t=>t.url===url).id',article.url)
@@ -144,13 +145,17 @@ try:
    passed('403 preserves useful diagnosis and does not auto-retry or echo raw secrets')
    control['mode']='ok';article.goto(origin+'/long');activate();message('SUMMARY_START',tabId=tab,preset='general');expect(panel.locator('#scope-note')).to_contain_text('60,000');expect(panel.locator('#summary-status')).to_have_text('总结完成',timeout=15000)
    passed('long input is explicitly bounded and truncation is visible')
-   ui.bring_to_front();article.goto(origin+'/new-page');expect(panel.locator('#scope-note')).to_contain_text('网页已变化');before=len(calls);panel.wait_for_timeout(400);assert len(calls)==before
-   passed('navigation in a hidden panel document marks old result without auto-requesting')
-   message('BLACKLIST_SET',site=origin,blocked=True);before=len(calls);message('SUMMARY_START',tabId=tab,preset='general');expect(panel.locator('#summary-message')).to_contain_text('黑名单');assert len(calls)==before
-   message('BLACKLIST_SET',site=origin,blocked=False);message('CLEAR_SUMMARY_KEY');assert message('UI_STATE')['profile']['hasKey'];before=len(calls);message('SUMMARY_START',tabId=tab);expect(panel.locator('#summary-message')).to_contain_text('API Key');assert len(calls)==before
+   before=len(calls);ui.bring_to_front();article.goto(origin+'/new-page')
+   expect(panel.locator('#summary-status')).to_have_text('自动总结已关闭')
+   expect(panel.locator('#summary-doc')).to_be_empty();assert len(calls)==before
+   passed('navigation clears another URL’s result without making a model request')
+   message('BLACKLIST_SET',site=origin,blocked=True);before=len(calls)
+   assert not message('SUMMARY_START',tabId=tab,preset='general')['started']
+   assert len(calls)==before
+   message('BLACKLIST_SET',site=origin,blocked=False);message('CLEAR_SUMMARY_KEY');assert message('UI_STATE')['profile']['hasKey'];before=len(calls);message('SUMMARY_START',tabId=tab);expect(panel.locator('#summary-status')).to_contain_text('等待模型');assert len(calls)==before
    passed('blacklist and cleared summary credentials prevent requests; translation key stays independent')
-   toolbar=context.new_page();toolbar.goto('chrome-extension://'+ext+'/popup.html?tab='+str(tab));expect(toolbar.locator('.summary-section')).to_be_visible();assert toolbar.locator('.popup-section').first.get_attribute('class').find('summary-section')>=0
-   passed('popup summary entrance is first; original translation remains below')
+   toolbar=context.new_page();toolbar.goto('chrome-extension://'+ext+'/popup.html?tab='+str(tab));expect(toolbar.locator('.summary-section')).to_be_visible();assert toolbar.locator('#page-translate').bounding_box()['y'] < toolbar.locator('#summarize-page').bounding_box()['y']
+   passed('popup translation comes first and summary keeps an independent entry')
    assert not errors,errors
    report['result']='pass';report['model_requests']=len(calls);report['page_errors']=errors
   finally:context.close()

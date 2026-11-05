@@ -4,14 +4,16 @@ Uses a temporary browser profile and synthetic public article text. No provider
 credentials, production hooks, or user browser data are used.
 """
 from pathlib import Path
+import sys
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from threading import Thread
 from playwright.sync_api import sync_playwright, expect
+from browser_binary import browser_binary
 import base64, json, tempfile, time, zipfile
 
 ROOT = Path(__file__).resolve().parents[1]
 VERSION = json.loads((ROOT/'package.json').read_text())['version']
-OUT = ROOT/'verification'
+OUT = ROOT/'verification' / (sys.argv[1] if len(sys.argv) > 1 else '')
 OUT.mkdir(exist_ok=True)
 report = {'version': VERSION, 'result': 'running', 'scope': 'Exact unmodified ZIP; native Chrome side panel; isolated temporary profile; local HTTP/SSE only.', 'checks': []}
 calls, errors = [], []
@@ -48,8 +50,8 @@ try:
         extension = Path(temp)/'extension'
         with zipfile.ZipFile(ROOT/'releases'/f'dianyi-chrome-edge-{VERSION}.zip') as archive:
             archive.extractall(extension)
-        binary = Path.home()/'Library/Caches/ms-playwright/chromium-1234/chrome-mac-arm64/Google Chrome for Testing.app/Contents/MacOS/Google Chrome for Testing'
-        context = p.chromium.launch_persistent_context(str(Path(temp)/'profile'), executable_path=str(binary), headless=False, ignore_default_args=['--disable-extensions'], args=['--window-size=1380,950', '--disable-extensions-except='+str(extension), '--load-extension='+str(extension)], no_viewport=True)
+        binary = browser_binary()
+        context = p.chromium.launch_persistent_context(str(Path(temp)/'profile'), executable_path=binary, headless=False, ignore_default_args=['--disable-extensions'], args=['--window-size=1380,950', '--disable-extensions-except='+str(extension), '--load-extension='+str(extension)], no_viewport=True)
         try:
             worker = context.service_workers[0] if context.service_workers else context.wait_for_event('serviceworker')
             ext = worker.url.split('/')[2]
@@ -102,23 +104,37 @@ try:
             def completed(tab_id):
                 wait(lambda: panel_target(tab_id) and panel_value(tab_id, 'document.querySelector("#summary-status").textContent') == '总结完成')
             def open_panel(article, tab_id):
-                popup = context.new_page(); popup.goto(f'chrome-extension://{ext}/popup.html?tab={tab_id}')
-                popup.locator('#summary-preset').select_option('general')
-                popup.locator('#summarize-page').click()
                 article.bring_to_front()
+                worker.evaluate('''async id=>{
+                  const {windowId}=await chrome.tabs.update(id,{active:true});
+                  await chrome.windows.update(windowId,{focused:true});
+                  await chrome.action.openPopup({windowId});
+                }''',tab_id)
+                def popup_target():
+                    return next((target for target in targets() if target['url'] == f'chrome-extension://{ext}/popup.html'), None)
+                wait(popup_target)
+                target = popup_target()['targetId']
+                def summary_button():
+                    expression = """(()=>{const button=document.querySelector('#summarize-page');if(!button||button.disabled)return null;
+                      const rect=button.getBoundingClientRect();return {x:rect.x+rect.width/2,y:rect.y+rect.height/2};})()"""
+                    return rpc(target,'Runtime.evaluate',{'expression':expression,'returnByValue':True})['result'].get('value')
+                wait(summary_button)
+                position = summary_button()
+                for event in ('mousePressed', 'mouseReleased'):
+                    rpc(target, 'Input.dispatchMouseEvent', {'type':event, 'button':'left', 'clickCount':1, **position})
                 wait(lambda: article.evaluate('innerWidth') < full_width-100)
                 completed(tab_id)
-                if not popup.is_closed(): popup.close()
             def close_panel(article, tab_id):
                 worker.evaluate('id=>chrome.sidePanel.close({tabId:id})', tab_id)
                 ui.wait_for_timeout(250)
                 article.bring_to_front()
 
+            edge = worker.evaluate('()=>/\\bEdg\\//.test(navigator.userAgent)')
             defaults = worker.evaluate('()=>chrome.sidePanel.getOptions({})')
             assert defaults['enabled'] is False, defaults
             for tab_id in [a, b]:
                 option = worker.evaluate('tabId=>chrome.sidePanel.getOptions({tabId})', tab_id)
-                assert option['enabled'] is True and option['path'] == f'summary.html?tabId={tab_id}', option
+                assert option['enabled'] is (not edge) and option['path'] == f'summary.html?tabId={tab_id}', option
             assert len(calls) == 0
             passed('global fallback is disabled; per-tab entries do not generate summaries')
 
@@ -146,12 +162,16 @@ try:
             assert len(calls) == 2 and 'PAGE_MARKER_article-b' in calls[-1]['messages'][-1]['content']
             assert 'article-a 的重点' in panel_value(a, 'document.querySelector("#summary-doc").innerText')
             passed('second tab opens independently and cannot overwrite the first tab result')
-            before = len(calls); article_b.reload(); wait(lambda: len(calls) == before+1); completed(b); ui.wait_for_timeout(400)
-            assert len(calls) == before+1
-            passed('visible native panel auto-summarizes a same-URL refresh exactly once')
-            before = len(calls); article_b.goto(origin_b+'/article-b-next'); wait(lambda: len(calls) == before+1); completed(b)
-            assert 'PAGE_MARKER_article-b-next' in calls[-1]['messages'][-1]['content']
-            passed('visible native panel summarizes loaded new source after navigation')
+            before = len(calls); article_b.reload(); completed(b); ui.wait_for_timeout(500)
+            assert len(calls) == before
+            passed('visible native panel reuses a saved same-URL summary after refresh')
+            article_b.goto(origin_b+'/article-b-next')
+            wait(lambda: panel_target(b) and panel_value(b, 'document.querySelector("#summary-status").textContent') == '自动总结已关闭')
+            assert len(calls) == before
+            panel_value(b, 'document.querySelector("#summary-retry").click()')
+            completed(b)
+            assert len(calls) == before+1 and 'PAGE_MARKER_article-b-next' in calls[-1]['messages'][-1]['content']
+            passed('navigation shows a manual summary action while automatic summaries are off')
 
             close_panel(article_b, b)
             before = len(calls); article_b.goto(origin_b+'/article-b-closed'); ui.wait_for_timeout(650)
@@ -159,9 +179,12 @@ try:
             # A browser-native opening has no SUMMARY_OPEN/START message. It
             # must begin through the panel's normal bind/visibility lifecycle.
             ui.evaluate('tabId=>chrome.sidePanel.open({tabId})', b)
-            article_b.bring_to_front(); wait(lambda: article_b.evaluate('innerWidth') < full_width-100); completed(b)
+            article_b.bring_to_front(); wait(lambda: article_b.evaluate('innerWidth') < full_width-100)
+            wait(lambda: panel_target(b) and panel_value(b, 'document.querySelector("#summary-status").textContent') == '自动总结已关闭')
+            assert len(calls) == before
+            panel_value(b, 'document.querySelector("#summary-retry").click()');completed(b)
             assert len(calls) == before+1
-            passed('direct native opening auto-starts through panel binding without SUMMARY_OPEN or SUMMARY_START')
+            passed('direct native opening binds the right tab and waits for explicit summary when automation is off')
             close_panel(article_b, b); before = len(calls); open_panel(article_b, b); ui.wait_for_timeout(450)
             assert len(calls) == before
             passed('closing prevents new automatic work; reopening a new page generates and the same page reuses')

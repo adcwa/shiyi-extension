@@ -3,6 +3,7 @@ from pathlib import Path
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from threading import Thread
 from playwright.sync_api import sync_playwright, expect
+from browser_binary import browser_binary
 import json, tempfile, time, zipfile
 
 ROOT=Path(__file__).resolve().parents[1]
@@ -31,8 +32,8 @@ try:
  with tempfile.TemporaryDirectory(prefix='dianyi-automatic-') as temporary,sync_playwright() as p:
   temp=Path(temporary);extension=temp/'extension'
   with zipfile.ZipFile(ROOT/'releases'/f'dianyi-chrome-edge-{VERSION}.zip') as z:z.extractall(extension)
-  binary=Path.home()/'Library/Caches/ms-playwright/chromium-1234/chrome-mac-arm64/Google Chrome for Testing.app/Contents/MacOS/Google Chrome for Testing'
-  def launch():return p.chromium.launch_persistent_context(str(temp/'profile'),executable_path=str(binary),headless=True,ignore_default_args=['--disable-extensions'],args=['--disable-extensions-except='+str(extension),'--load-extension='+str(extension)],viewport={'width':1440,'height':950})
+  binary=browser_binary()
+  def launch():return p.chromium.launch_persistent_context(str(temp/'profile'),executable_path=binary,headless=True,ignore_default_args=['--disable-extensions'],args=['--disable-extensions-except='+str(extension),'--load-extension='+str(extension)],viewport={'width':1440,'height':950})
   context=launch()
   try:
    worker=context.service_workers[0] if context.service_workers else context.wait_for_event('serviceworker');ext=worker.url.split('/')[2]
@@ -55,9 +56,13 @@ try:
    tab=worker.evaluate('async url=>(await chrome.tabs.query({})).find(t=>t.url===url).id',article.url)
    popup=context.new_page();popup.goto(f'chrome-extension://{ext}/popup.html?tab={tab}')
    expect(popup.locator('#auto-summary-switch')).to_have_attribute('aria-checked','false');expect(popup.locator('#summarize-page')).to_be_enabled()
-   assert popup.locator('#auto-summary-switch').bounding_box()['y']<160
+   assert popup.locator('#page-translate').bounding_box()['y'] < popup.locator('#summarize-page').bounding_box()['y']
+   assert popup.locator('#auto-summary-switch').bounding_box()['y'] < 460
+   assert popup.locator('#popup').bounding_box()['height'] <= 460
+   for label in ['词句库', '我的轨迹', '阅读回顾']:
+    expect(popup.get_by_role('button',name=label,exact=True)).to_be_in_viewport()
    shots=OUT/'automatic-summary-ui';shots.mkdir(exist_ok=True);popup.locator('.summary-section').screenshot(path=str(shots/'popup-off.png'))
-   passed('configuring a model and browsing or reloading never bills while off; popup top switch is visible')
+   passed('configuring a model and browsing or reloading never bills while off; translation comes first and both tasks and local data links fit the popup')
    panel=context.new_page();panel.goto(f'chrome-extension://{ext}/summary.html?tabId={tab}')
    expect(panel.locator('#summary-status')).to_have_text('自动总结已关闭');panel.wait_for_timeout(500);assert len(calls)==0
    panel.locator('#summary-retry').click();expect(panel.locator('#summary-status')).to_have_text('总结完成')
@@ -77,7 +82,7 @@ try:
    assert all('queued-auto' not in c['messages'][-1]['content'] for c in calls)
    assert not worker.evaluate('()=>chrome.alarms.get("dianyi-knowledge-daily")');slow=False
    passed('turning off cancels the in-flight automatic stream, pauses queued work and removes the daily alarm')
-   ui.reload();expect(ui.locator('#auto-summary-setting')).not_to_be_checked();ui.locator('#knowledge-time').fill('19:25');ui.get_by_role('button',name='保存回顾设置',exact=True).click();expect(ui.locator('#notice')).to_contain_text('回顾设置已保存')
+   ui.reload();expect(ui.locator('#auto-summary-setting')).not_to_be_checked();ui.locator('#review-advanced > summary').click();ui.locator('#knowledge-time').fill('19:25');ui.get_by_role('button',name='保存回顾设置',exact=True).click();expect(ui.locator('#notice')).to_contain_text('回顾设置已保存')
    api('KNOWLEDGE_PREFS',prefs={'time':'19:30'});assert api('UI_STATE')['knowledgePrefs']['autoSummary'] is False
    worker.evaluate('()=>chrome.alarms.create("dianyi-knowledge-daily",{when:Date.now()+100})');api('KNOWLEDGE_RESUME');ui.wait_for_timeout(700);assert len(calls)==before
    assert not worker.evaluate('()=>chrome.alarms.get("dianyi-knowledge-daily")')
