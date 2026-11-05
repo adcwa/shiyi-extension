@@ -2,7 +2,7 @@ import './text.js';
 import './block-text.js';
 import { DEFAULT_PROVIDER, PROVIDERS, presetProfile } from './providers.js';
 
-export const VERSION = '0.14.2';
+export const VERSION = '0.14.3';
 export const LANGUAGES = Object.freeze({ 'zh-CN': '简体中文', en: 'English', ja: '日本語', ko: '한국어', fr: 'Français', de: 'Deutsch', es: 'Español' });
 export const STYLES = Object.freeze({ regular: '常规', professional: '专业', humorous: '幽默', custom: '自定义' });
 export const PROMPTS = Object.freeze({
@@ -10,7 +10,7 @@ export const PROMPTS = Object.freeze({
   professional: '优先使用准确的专业术语，保留概念边界；必要时用一句话说明含义。',
   humorous: '先准确解释，再用一句轻松幽默的表达帮助记忆；不改变原意，不编造事实。'
 });
-export const DEFAULT_PREFS = Object.freeze({ targetLanguage: 'zh-CN', displayMode: 'hover', style: 'regular', customPrompt: '将 {{text}} 翻译为 {{targetLanguage}}，用一句自然的表达解释。', includeContext: false, batchSize: globalThis.ShiyiBlockText.DEFAULT_BATCH_BLOCKS, translationColorLight: '#245e4d', translationColorDark: '#c1e7d5' });
+export const DEFAULT_PREFS = Object.freeze({ targetLanguage: 'zh-CN', displayMode: 'hover', style: 'regular', customPrompt: '将 {{text}} 翻译为 {{targetLanguage}}，用一句自然的表达解释。', includeContext: false, batchSize: globalThis.ShiyiBlockText.DEFAULT_BATCH_BLOCKS, bilingualFontReduction:0, translationColorLight: '#245e4d', translationColorDark: '#c1e7d5' });
 export const DEFAULT_PROFILE = Object.freeze({ provider: DEFAULT_PROVIDER, region: '', name: '', endpoint: '', model: '', auth: 'bearer', timeoutSeconds: 20, rememberKey: false });
 export const normalize = globalThis.ShiyiText.normalize;
 export const entryIdentity = (text, language) => `${language}\u001f${normalize(text)}`;
@@ -32,12 +32,14 @@ export function cleanPrefs(input) {
   const customPrompt = boundedText(input.customPrompt ?? DEFAULT_PREFS.customPrompt, 4000, '自定义提示词', { optional: input.style !== 'custom' });
   const batchSize = Number(input.batchSize ?? DEFAULT_PREFS.batchSize);
   assert(Number.isInteger(batchSize) && batchSize >= 1 && batchSize <= globalThis.ShiyiBlockText.MAX_BATCH_BLOCKS, 'INVALID_INPUT', '每批翻译块数需要是 1–64 的整数。');
+  const bilingualFontReduction = input.bilingualFontReduction ?? DEFAULT_PREFS.bilingualFontReduction;
+  assert(Number.isInteger(bilingualFontReduction)&&bilingualFontReduction>=0&&bilingualFontReduction<=4,'INVALID_INPUT','双语译文字号请选择与原文一致，或缩小 1–4px。');
   const color = (value, fallback) => {
     const chosen = value ?? fallback;
     assert(typeof chosen === 'string' && /^#[a-f\d]{6}$/i.test(chosen), 'INVALID_INPUT', '译文颜色需要使用六位颜色值，例如 #245e4d。');
     return chosen.toLowerCase();
   };
-  return { targetLanguage: input.targetLanguage, displayMode: input.displayMode, style: input.style, customPrompt, includeContext: input.includeContext === true, batchSize,
+  return { targetLanguage: input.targetLanguage, displayMode: input.displayMode, style: input.style, customPrompt, includeContext: input.includeContext === true, batchSize,bilingualFontReduction,
     translationColorLight: color(input.translationColorLight, DEFAULT_PREFS.translationColorLight), translationColorDark: color(input.translationColorDark, DEFAULT_PREFS.translationColorDark) };
 }
 export function modelEndpoint(value) {

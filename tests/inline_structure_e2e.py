@@ -7,7 +7,7 @@ from pathlib import Path
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from threading import Thread
 from playwright.sync_api import sync_playwright, expect
-import json, shutil, tempfile, time, zipfile
+import json, shutil, tempfile, time, zipfile, subprocess, sys
 
 ROOT = Path(__file__).resolve().parents[1]
 VERSION = json.loads((ROOT / 'package.json').read_text())['version']
@@ -86,7 +86,8 @@ try:
         extension = temp / 'extension'
         with zipfile.ZipFile(ROOT / 'releases/dianyi-chrome-edge-0.8.0.zip') as archive:
             archive.extractall(extension)
-        binary = next((Path.home() / 'Library/Caches/ms-playwright').glob('chromium-1234/chrome-mac-arm64/Google Chrome for Testing.app/Contents/MacOS/Google Chrome for Testing'))
+        candidates=sorted((Path.home()/'Library/Caches/ms-playwright').glob('chromium-*'),key=lambda path:int(path.name.split('-')[-1]),reverse=True)
+        binary=next(path/'chrome-mac-arm64/Google Chrome for Testing.app/Contents/MacOS/Google Chrome for Testing' for path in candidates if (path/'chrome-mac-arm64/Google Chrome for Testing.app/Contents/MacOS/Google Chrome for Testing').is_file())
         def launch():
             return p.chromium.launch_persistent_context(str(temp / 'profile'), executable_path=str(binary), headless=True, ignore_default_args=['--disable-extensions'], args=['--disable-extensions-except=' + str(extension), '--load-extension=' + str(extension)], viewport={'width': 1250, 'height': 950})
         ctx = launch()
@@ -121,8 +122,8 @@ try:
         assert page.locator('#basic + [data-shiyi-block-translation] a').count() == 0
         seed_calls = len(calls)
         ctx.close()
-        shutil.rmtree(extension)
-        shutil.copytree(ROOT / 'releases' / ('dianyi-' + VERSION), extension)
+        upgraded=subprocess.run([sys.executable,str(ROOT/'src/upgrade/install.py'),'--source',str(ROOT/'releases'/('dianyi-'+VERSION)),'--target',str(extension)],capture_output=True,text=True)
+        assert upgraded.returncode==0,upgraded.stderr
         ctx = launch()
         try:
             assert attach() == ext
@@ -227,21 +228,21 @@ try:
             for source, output in [('#basic b', '#basic + [data-shiyi-block-translation] b'), ('#font', '#basic + [data-shiyi-block-translation] font'), ('#code', '#basic + [data-shiyi-block-translation] code')]:
                 size = page.locator(source).first.evaluate('n=>parseFloat(getComputedStyle(n).fontSize)')
                 actual = page.locator(output).first.evaluate('n=>parseFloat(getComputedStyle(n).fontSize)')
-                assert abs(actual - (size - 2)) < .1, (source, size, actual)
+                assert abs(actual - size) < .1, (source, size, actual)
             assert len(calls) == before
-            passed('Nested font/code/bold text respects the configured translation color and source-minus-2px sizing without another request')
+            passed('Nested font/code/bold text respects the configured translation color and defaults to the source font size without another request')
             page.set_viewport_size({'width': 390, 'height': 900})
             page.wait_for_timeout(100)
             # BR has no painted width, so Playwright's box visibility check is
             # not meaningful. Check its actual responsive display state.
             page.wait_for_function("()=>getComputedStyle(document.querySelector('#hidden-break')).display!=='none'&&getComputedStyle([...document.querySelectorAll('#breaks + [data-shiyi-block-translation] br')].at(-1)).display!=='none'")
-            assert basic.locator('b').first.evaluate('n=>parseFloat(getComputedStyle(n).fontSize)') == page.locator('#basic b').first.evaluate('n=>parseFloat(getComputedStyle(n).fontSize)-2')
+            assert basic.locator('b').first.evaluate('n=>parseFloat(getComputedStyle(n).fontSize)') == page.locator('#basic b').first.evaluate('n=>parseFloat(getComputedStyle(n).fontSize)')
             assert page.evaluate('document.documentElement.scrollWidth<=innerWidth')
             page.set_viewport_size({'width': 1250, 'height': 950})
             passed('Responsive source typography also refreshes nested reconstructed tags and fits a narrow viewport')
             page.locator('#font').evaluate('n=>n.setAttribute("size","6")')
             page.wait_for_timeout(100)
-            assert basic.locator('font').evaluate('n=>parseFloat(getComputedStyle(n).fontSize)') == page.locator('#font').evaluate('n=>parseFloat(getComputedStyle(n).fontSize)-2')
+            assert basic.locator('font').evaluate('n=>parseFloat(getComputedStyle(n).fontSize)') == page.locator('#font').evaluate('n=>parseFloat(getComputedStyle(n).fontSize)')
             assert len(calls) == before
             page.locator('#font').evaluate('n=>n.setAttribute("size","5")')
             passed('Local font attribute changes update formatting in place without discarding translations or requesting a model')

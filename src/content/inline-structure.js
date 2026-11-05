@@ -76,7 +76,11 @@
     if (slot.node.parentElement?.closest('a') && /^(?:https?:\/\/|www\.)\S+$|^(?:[\w-]+\.)+[a-z]{2,}(?:[/?#]\S*)?$/i.test(text)) return slot.source;
     return translated;
   }
-  function appearance(bindings) {
+  function fontReduction(prefs={}) {
+    const value=prefs.bilingualFontReduction;
+    return Number.isInteger(value)&&value>=0&&value<=4?value:0;
+  }
+  function appearance(bindings,prefs={}) {
     for (const { source, node } of bindings) {
       if (!source.isConnected) continue;
       if (node.matches('br,wbr')) {
@@ -90,7 +94,7 @@
       const style = getComputedStyle(source);
       for (const name of textStyles) node.style.setProperty(name, style.getPropertyValue(name));
       if (aliases[source.localName]) node.style.fontWeight = '700';
-      const original = parseFloat(style.fontSize) || 16, size = Math.max(1, original - 2), line = parseFloat(style.lineHeight);
+      const original = parseFloat(style.fontSize) || 16, size = Math.max(1, original - fontReduction(prefs)), line = parseFloat(style.lineHeight);
       node.style.setProperty('font-size', `${size}px`, 'important');
       node.style.setProperty('line-height', Number.isFinite(line) ? `${line * size / original}px` : 'normal');
       node.style.setProperty('color', 'inherit', 'important');
@@ -174,7 +178,7 @@
     // lines. Protected code whitespace, interior spaces and real breaks remain.
     for (const { node, locked } of edgeText) { if (locked) break; node.data = node.data.trimStart(); if (node.data) break; }
     for (const { node, locked } of [...edgeText].reverse()) { if (locked) break; node.data = node.data.trimEnd(); if (node.data) break; }
-    appearance(bindings); return { fragment, bindings };
+    appearance(bindings,options.appearance); return { fragment, bindings };
   }
-  globalThis.ShiyiInline = Object.freeze({ capture, current, render, appearance, value });
+  globalThis.ShiyiInline = Object.freeze({ capture, current, render, appearance, value,fontReduction });
 })();

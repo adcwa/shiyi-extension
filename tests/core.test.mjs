@@ -29,6 +29,12 @@ test('reading preferences default legacy configurations to 16 blocks and normali
   assert.equal(cleanPrefs({ ...DEFAULT_PREFS, translationColorLight: '#1D4ED8' }).translationColorLight, '#1d4ed8');
   for (const patch of [{ batchSize: 0 }, { batchSize: 65 }, { batchSize: 1.5 }, { batchSize: '' }, { translationColorLight: 'red' }, { translationColorDark: '#fff' }, { translationColorLight: '#112233; background:url(x)' }]) assert.throws(() => cleanPrefs({ ...DEFAULT_PREFS, ...patch }), error => error.code === 'INVALID_INPUT');
 });
+test('bilingual font reduction defaults to zero on upgrades and validates local appearance choices',()=>{
+  const {bilingualFontReduction,...legacy}=DEFAULT_PREFS;
+  assert.equal(bilingualFontReduction,0);assert.equal(cleanPrefs(legacy).bilingualFontReduction,0);
+  for(const value of [0,1,2,3,4])assert.equal(cleanPrefs({...DEFAULT_PREFS,bilingualFontReduction:value}).bilingualFontReduction,value);
+  for(const value of [-1,5,1.5,'2',NaN,true])assert.throws(()=>cleanPrefs({...DEFAULT_PREFS,bilingualFontReduction:value}),error=>error.code==='INVALID_INPUT');
+});
 test('website rules use exact origins including ports, without silently granting subdomains', () => {
   assert.equal(siteOrigin('Read.Example.com'), 'https://read.example.com');
   assert.equal(siteOrigin('http://localhost:9080'), 'http://localhost:9080');

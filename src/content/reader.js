@@ -69,7 +69,7 @@
     element.dataset.shiyiBlockTranslation = `block-${++serial}`;
     element.lang = language; element.setAttribute('aria-label', '译文');
     element.textContent = text; translationTheme(element, owner, appearance);
-    translationType(element, style); return element;
+    translationType(element, style,appearance); return element;
   }
   function insertion(record, text, language, appearance, rich) {
     const owner = record.owner, whole = record.whole ?? coversOwner(owner, record.slots);
@@ -87,9 +87,9 @@
     }
     return element;
   }
-  function translationType(element, style) {
+  function translationType(element, style,appearance) {
     for (const name of ['font-family', 'font-weight', 'letter-spacing', 'text-align']) element.style.setProperty(name, style.getPropertyValue(name));
-    const sourceSize = parseFloat(style.fontSize) || 16, size = Math.max(1, sourceSize - 2), line = parseFloat(style.lineHeight);
+    const sourceSize = parseFloat(style.fontSize) || 16, size = Math.max(1, sourceSize - Inline.fontReduction(appearance)), line = parseFloat(style.lineHeight);
     element.style.setProperty('font-size', `${size}px`, 'important');
     element.style.setProperty('line-height', Number.isFinite(line) ? `${line * size / sourceSize}px` : 'normal');
   }
@@ -129,7 +129,7 @@
       }
       const element = translationElement(target, text, language, appearance, getComputedStyle(target));
       const mapping = Inline.capture(group.target, group.slots);
-      const rich = Inline.render(mapping, group.values);
+      const rich = Inline.render(mapping, group.values,{appearance});
       if (mapping) { element.replaceChildren(rich.fragment); bindings.push(...rich.bindings); }
       target.append(element); compactPlacement(element); elements.push(element);
     }
@@ -182,7 +182,7 @@
       if (mode === 'bilingual') {
         if (record.compact) Object.assign(record, insertCompact(record, bridge.prefs().targetLanguage, bridge.prefs()));
         else {
-          const rich = Inline.render(record.inline, record.values, { slots: record.slots, skip: index => nativeSlot(record.slots[index], bridge.prefs().targetLanguage), onStale: () => {
+          const rich = Inline.render(record.inline, record.values, { appearance:bridge.prefs(),slots: record.slots, skip: index => nativeSlot(record.slots[index], bridge.prefs().targetLanguage), onStale: () => {
             write(() => restoreRecord(record)); record.status = 'stale'; newContent = true; emit(); bridge.notice('原链接已变化，请翻译新增内容后再打开。');
           } });
           const text = rich.fragment.textContent.trim();
@@ -356,7 +356,7 @@
       if (!paused && !newContent && records.every(record => record.status === 'done')) { freshRead = false; await checkpoint([], token); }
       emit();
     }
-    function updateTheme() { if (active) anchored(() => records.forEach(record => { for (const element of record.elements || []) { const source = record.compact ? element.parentElement : record.whole ? record.owner : record.slots[0]?.node.parentElement || record.owner; translationTheme(element, source, bridge.prefs()); translationType(element, getComputedStyle(source)); if (record.compact) compactPlacement(element); } Inline.appearance(record.inlineBindings || []); })); }
+    function updateTheme() { if (active) anchored(() => records.forEach(record => { for (const element of record.elements || []) { const source = record.compact ? element.parentElement : record.whole ? record.owner : record.slots[0]?.node.parentElement || record.owner; translationTheme(element, source, bridge.prefs()); translationType(element, getComputedStyle(source),bridge.prefs()); if (record.compact) compactPlacement(element); } Inline.appearance(record.inlineBindings || [],bridge.prefs()); })); }
     function monitor() {
       themeMedia.addEventListener('change', updateTheme);
       window.addEventListener('resize', updateTheme);

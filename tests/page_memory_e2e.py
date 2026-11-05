@@ -7,7 +7,7 @@ from pathlib import Path
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from threading import Thread, Lock
 from playwright.sync_api import sync_playwright, expect
-import json, os, shutil, tempfile, time, zipfile
+import json, os, shutil, tempfile, time, zipfile, subprocess, sys
 
 ROOT = Path(__file__).resolve().parents[1]
 VERSION = json.loads((ROOT/'package.json').read_text())['version']
@@ -90,7 +90,7 @@ try:
         message(ui, 'SAVE_PREFS', prefs=prefs)
         ui.evaluate('''async()=>{const {entryIdentity}=await import('./lib/core.js');await new Promise((resolve,reject)=>{const r=indexedDB.open('shiyi-vocabulary');r.onsuccess=()=>{const db=r.result;if(db.version!==1)return reject(new Error('Expected v1'));const tx=db.transaction('entries','readwrite');tx.objectStore('entries').put({id:'migration-word',identity:entryIdentity('migration','zh-CN'),text:'migration',translation:'迁移',targetLanguage:'zh-CN',kind:'word',style:'normal',createdAt:1,updatedAt:1,source:{url:'https://fixture.test',domain:'fixture.test',title:'fixture'}});tx.oncomplete=()=>{db.close();resolve()};tx.onerror=()=>reject(tx.error)};r.onerror=()=>reject(r.error)})}''')
         old_storage = ui.evaluate('async()=>chrome.storage.local.get(["config","credential"])')
-        context.close(); shutil.rmtree(extension); shutil.copytree(ROOT/'releases'/('dianyi-'+VERSION), extension)
+        context.close(); updated=subprocess.run([sys.executable,str(ROOT/'src/upgrade/install.py'),'--source',str(ROOT/'releases'/('dianyi-'+VERSION)),'--target',str(extension)],capture_output=True,text=True); assert updated.returncode==0,updated.stderr
         context = launch()
         try:
             worker = context.service_workers[0] if context.service_workers else context.wait_for_event('serviceworker', timeout=15000)
@@ -129,16 +129,16 @@ try:
             page.screenshot(path=str(OUT/'dianyi-pet-idle.png'), animations='disabled', caret='initial')
             menu = open_menu(page); menu.get_by_role('button', name='翻译当前页面', exact=True).click(); result = complete(ui, tab)
             assert result['failed'] == 0 and result['cached'] >= result['completed'], result
-            style = styles(page); assert style['source']-style['translation'] == 2 and style['background'] == 'rgba(0, 0, 0, 0)' and style['border'] == 0 and style['sourceColor'] != style['translationColor'], style
+            style = styles(page); assert style['source']-style['translation'] == 0 and style['background'] == 'rgba(0, 0, 0, 0)' and style['border'] == 0 and style['sourceColor'] != style['translationColor'], style
             original_size = style['source']; before = len(calls)
             command(ui, tab, 'mode', 'translation'); expect(page.locator('[data-shiyi-block-translation]')).to_have_count(0)
             assert page.locator('#lead').evaluate('n=>parseFloat(getComputedStyle(n).fontSize)') == original_size
             assert page.locator('#lead').inner_text().startswith('译1：')
-            command(ui, tab, 'mode', 'bilingual'); assert len(calls) == before and styles(page)['source']-styles(page)['translation'] == 2
-            page.set_viewport_size({'width':390, 'height':844}); page.wait_for_timeout(150); assert styles(page)['source'] == 16 and styles(page)['translation'] == 14
+            command(ui, tab, 'mode', 'bilingual'); assert len(calls) == before and styles(page)['source']-styles(page)['translation'] == 0
+            page.set_viewport_size({'width':390, 'height':844}); page.wait_for_timeout(150); assert styles(page)['source'] == 16 and styles(page)['translation'] == 16
             assert page.evaluate('document.documentElement.scrollWidth<=innerWidth+1')
             page.set_viewport_size({'width':1100, 'height':880}); page.wait_for_timeout(150)
-            passed('Translations use configured text color only: no background or border; bilingual is exactly 2px smaller at desktop/mobile sizes and translation-only keeps source size without another request', styles=style)
+            passed('Translations use configured text color only: no background or border; bilingual matches the original font size at desktop/mobile sizes and translation-only keeps source size without another request', styles=style)
             panel = open_menu(page); page.screenshot(path=str(OUT/'dianyi-pet-menu.png'), animations='disabled', caret='initial')
             box = panel.bounding_box()
             page.screenshot(path=str(OUT/'dianyi-companion-preview.png'), clip={'x':box['x']-10,'y':box['y']-10,'width':box['width']+20,'height':880-box['y']}, animations='disabled', caret='initial')

@@ -145,6 +145,7 @@ function collectPrefs() {
     draft.targetLanguage = document.getElementById('target-language').value;
     draft.includeContext = document.getElementById('include-context').checked;
     draft.batchSize = Number(document.getElementById('batch-size').value);
+    draft.bilingualFontReduction = Number(document.getElementById('bilingual-font-reduction').value);
     draft.translationColorLight = document.getElementById('color-light-hex').value;
     draft.translationColorDark = document.getElementById('color-dark-hex').value;
     if (draft.style === 'custom') draft.customPrompt = document.getElementById('style-prompt').value;
@@ -304,6 +305,7 @@ document.addEventListener('input', event => {
 });
 document.addEventListener('change', event => {
   const input = event.target;
+  if(input.id==='bilingual-font-reduction')document.getElementById('reading-preferences-card').style.setProperty('--preview-font-reduction',`${Number(input.value)}px`);
   if(input.id==='vocabulary-file'){const file=input.files?.[0];input.value='';if(file)busy(null,async()=>{if(file.size>16*1024*1024)throw Error('词库文件超过 16 MB，请分批恢复。');let data;try{data=JSON.parse(await file.text());}catch{throw Error('文件不是有效的词库 JSON，请选择点译导出的备份。');}const result=await api('VOCABULARY_IMPORT',{data});await refreshData();draw();notify(`已恢复 ${result.added} 个词句，保留 ${result.skipped} 个已有词句`);});return;}
   if(input.dataset.sceneDefault){busy(input,()=>updateScene(input.dataset.sceneDefault,input.value));return;}
   if(input.dataset.sceneAdd&&input.value){busy(input,()=>updateScene(input.dataset.sceneAdd,input.value,{makeDefault:false}));return;}

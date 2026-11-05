@@ -7,7 +7,7 @@ from pathlib import Path
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from threading import Thread, Lock
 from playwright.sync_api import sync_playwright, expect
-import json, tempfile, time
+import json, tempfile, time,zipfile
 
 ROOT=Path(__file__).resolve().parents[1]
 VERSION=json.loads((ROOT/'package.json').read_text())['version']
@@ -46,13 +46,16 @@ server=ThreadingHTTPServer(('127.0.0.1',0),Handler);Thread(target=server.serve_f
 origin='http://127.0.0.1:'+str(server.server_port)
 try:
     with tempfile.TemporaryDirectory(prefix='shiyi-reading-prefs-') as temp,sync_playwright() as p:
-        browser=next((Path.home()/'Library/Caches/ms-playwright').glob('chromium-1234/chrome-mac-arm64/Google Chrome for Testing.app/Contents/MacOS/Google Chrome for Testing'))
-        extension=ROOT/'releases'/('shiyi-'+VERSION)
+        candidates=sorted((Path.home()/'Library/Caches/ms-playwright').glob('chromium-*'),key=lambda path:int(path.name.split('-')[-1]),reverse=True)
+        browser=next(path/'chrome-mac-arm64/Google Chrome for Testing.app/Contents/MacOS/Google Chrome for Testing' for path in candidates if (path/'chrome-mac-arm64/Google Chrome for Testing.app/Contents/MacOS/Google Chrome for Testing').is_file())
+        extension=Path(temp)/'exact-zip'
+        with zipfile.ZipFile(ROOT/'releases'/f'dianyi-chrome-edge-{VERSION}.zip') as archive:archive.extractall(extension)
         ctx=p.chromium.launch_persistent_context(temp,executable_path=str(browser),headless=True,ignore_default_args=['--disable-extensions'],args=['--disable-extensions-except='+str(extension),'--load-extension='+str(extension)],viewport={'width':1440,'height':1100})
         try:
             worker=ctx.service_workers[0] if ctx.service_workers else ctx.wait_for_event('serviceworker');ext=worker.url.split('/')[2]
             ui=ctx.new_page();ui.on('pageerror',lambda e:report['errors'].append(str(e)));ui.goto('chrome-extension://'+ext+'/options.html#translation')
             expect(ui.get_by_label('每批翻译块数',exact=True)).to_have_value('16')
+            expect(ui.get_by_label('双语译文字号',exact=True)).to_have_value('0')
             def message(kind,**payload):
                 result=ui.evaluate('data=>chrome.runtime.sendMessage(data)',{'type':'SHIYI/'+kind,**payload});assert result['ok'],result;return result['data']
             def save():
@@ -99,6 +102,30 @@ try:
             command('restore');passed('Missing and duplicated block IDs preserve only their own originals; retry sends exactly those two failed blocks')
 
             model('prefs-colors');command('translate','bilingual');complete();before=len(calls)
+            original_node=article.locator('#p0 + [data-shiyi-block-translation]');expect(original_node).to_have_css('font-size','16px')
+            for tag in ['a','em','code']:
+                source_size=article.locator('#p0 '+tag).evaluate('n=>getComputedStyle(n).fontSize')
+                expect(original_node.locator(tag)).to_have_css('font-size',source_size)
+            passed('Default bilingual text and its nested links, emphasis and code retain each original font size')
+            article.evaluate('window.fontTestNode=document.querySelector("#p0 + [data-shiyi-block-translation]")')
+            for reduction in [2,4,0]:
+                ui.get_by_label('双语译文字号',exact=True).select_option(str(reduction))
+                expect(ui.locator('#color-light-preview .preview-translation')).to_have_css('font-size',str(16-reduction)+'px')
+                save();expect(original_node).to_have_css('font-size',str(16-reduction)+'px')
+                for tag in ['a','em','code']:
+                    size=article.locator('#p0 '+tag).evaluate('n=>parseFloat(getComputedStyle(n).fontSize)')
+                    expect(original_node.locator(tag)).to_have_css('font-size',str(int(size)-reduction)+'px')
+                assert article.evaluate('fontTestNode===document.querySelector("#p0 + [data-shiyi-block-translation]")')
+                assert len(calls)==before
+            ui.get_by_label('双语译文字号',exact=True).select_option('2');save()
+            command('mode','translation');expect(article.locator('#p0')).to_have_css('font-size','16px');expect(article.locator('#p0 code')).to_have_css('font-size','12px')
+            command('mode','bilingual');expect(original_node).to_have_css('font-size','14px')
+            assert len(calls)==before
+            ui.reload();expect(ui.get_by_label('双语译文字号',exact=True)).to_have_value('2')
+            article.reload();expect(article.locator('#p0 + [data-shiyi-block-translation]')).to_have_css('font-size','14px')
+            assert len(calls)==before
+            ui.get_by_label('双语译文字号',exact=True).select_option('0');save();expect(article.locator('#p0 + [data-shiyi-block-translation]')).to_have_css('font-size','16px')
+            passed('Font choices repaint existing nodes without model calls; translation-only retains original sizes and reload restores the saved choice with cached translations')
             ui.get_by_role('button',name='浅色页面：蓝色',exact=True).click();ui.get_by_role('button',name='深色页面：浅蓝',exact=True).click()
             expect(ui.get_by_label('浅色页面取色器',exact=True)).to_have_value('#1d4ed8');expect(ui.get_by_label('深色页面颜色值',exact=True)).to_have_value('#bfdbfe')
             ui.get_by_label('浅色页面颜色值',exact=True).fill('#aa22cc')
@@ -114,12 +141,13 @@ try:
             batch_size(32);model('prefs-live');control['delay']=.25;command('translate','bilingual')
             deadline=time.monotonic()+5
             while len([c for c in calls if c['model']=='prefs-live'])<2 and time.monotonic()<deadline:ui.wait_for_timeout(20)
-            ui.get_by_label('每批翻译块数',exact=True).fill('4');ui.get_by_label('浅色页面颜色值',exact=True).fill('#6d28d9');save()
+            ui.get_by_label('双语译文字号',exact=True).select_option('2');ui.get_by_label('每批翻译块数',exact=True).fill('4');ui.get_by_label('浅色页面颜色值',exact=True).fill('#6d28d9');save()
             result=complete();control['delay']=0
             assert result['completed']==65 and result['failed']==0,result
             expect(article.locator('[data-shiyi-block-translation]').first).to_have_css('color','rgb(109, 40, 217)')
+            expect(article.locator('#p0 + [data-shiyi-block-translation]')).to_have_css('font-size','14px')
             command('mode','translation');correct();command('restore');assert article.locator('main').inner_html()==initial
-            passed('Saving batch size and color during in-flight 32-block work preserves the job, correctly applies later batches, and loses no mappings')
+            passed('Saving font size, batch size and color during in-flight 32-block work preserves the job, correctly applies later batches, and loses no mappings')
 
             entry={'id':'color-word','identity':'zh-CN\x1flink 5','text':'link 5','translation':'链接五','kind':'phrase','sourceLanguage':'en','targetLanguage':'zh-CN','style':'regular','source':{'domain':'127.0.0.1','url':'','title':'Color fixture'},'createdAt':1,'updatedAt':1}
             assert ui.evaluate('''entry=>new Promise((resolve,reject)=>{const o=indexedDB.open('shiyi-vocabulary');o.onsuccess=()=>{const db=o.result,tx=db.transaction('entries','readwrite');tx.objectStore('entries').put(entry);tx.oncomplete=()=>{db.close();resolve(true)};tx.onerror=()=>reject(tx.error)}})''',entry)
@@ -128,7 +156,7 @@ try:
             ui.get_by_role('button',name='括号释义',exact=True).click();save();expect(article.locator('#link5 [data-shiyi-meaning]')).to_have_css('color','rgb(109, 40, 217)')
             passed('The configured light-page color also applies to saved hover definitions and inline parenthetical meanings')
 
-            ui.get_by_role('button',name='悬浮释义',exact=True).click();ui.get_by_label('每批翻译块数',exact=True).fill('16');ui.get_by_role('button',name='浅色页面：蓝色',exact=True).click();save();ui.reload()
+            ui.get_by_role('button',name='悬浮释义',exact=True).click();ui.get_by_label('双语译文字号',exact=True).select_option('0');ui.get_by_label('每批翻译块数',exact=True).fill('16');ui.get_by_role('button',name='浅色页面：蓝色',exact=True).click();save();ui.reload()
             expect(ui.get_by_label('每批翻译块数',exact=True)).to_have_value('16');expect(ui.get_by_label('浅色页面颜色值',exact=True)).to_have_value('#1d4ed8')
             expect(ui.get_by_label('深色页面取色器',exact=True)).to_have_value('#bfdbfe')
             ui.locator('#reading-preferences-card').screenshot(path=str(OUT/'reading-preferences.png'),animations='disabled',caret='initial')
@@ -149,4 +177,4 @@ try:
 except Exception as error:
     report['result']='fail';report['failure']=str(error);raise
 finally:
-    server.shutdown();server.server_close();(OUT/'reading-preferences-e2e.json').write_text(json.dumps(report,ensure_ascii=False,indent=2)+'\n');print(json.dumps({'result':report['result'],'checks':len(report['checks']),'failure':report.get('failure')},ensure_ascii=False),flush=True)
+    server.shutdown();server.server_close();(OUT/f'reading-preferences-{VERSION}.json').write_text(json.dumps(report,ensure_ascii=False,indent=2)+'\n');print(json.dumps({'result':report['result'],'checks':len(report['checks']),'failure':report.get('failure')},ensure_ascii=False),flush=True)
