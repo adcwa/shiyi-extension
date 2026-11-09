@@ -27,16 +27,66 @@
     node('path', { d: 'M38 69h4m-2-1v5m-2-2 2 2 2-2', fill: 'none', stroke: '#ffffff', 'stroke-width': '1.2', 'stroke-linecap': 'round' }, cat);
     return svg;
   }
+  const clamp = (value, max, pad) => Math.max(pad, Math.min(value, max - pad));
+  function positionPanel(companion) {
+    const panel = companion.querySelector('.pet-panel');
+    if (panel.hidden) return;
+    const pet = companion.getBoundingClientRect(), pad = 8, gap = 8;
+    const above = pet.top - pad - gap, below = innerHeight - pet.bottom - pad - gap;
+    const opensAbove = above >= below;
+    panel.style.maxHeight = `${Math.max(0, opensAbove ? above : below)}px`;
+    panel.style.top = opensAbove ? 'auto' : `${pet.height + gap}px`;
+    panel.style.bottom = opensAbove ? `${pet.height + gap}px` : 'auto';
+    panel.style.left = `${clamp(pet.right - panel.offsetWidth, innerWidth - panel.offsetWidth, pad) - pet.left}px`;
+    panel.style.right = 'auto';
+  }
+  function place(companion, position) {
+    if (position.left !== undefined) {
+      position.left = clamp(position.left, innerWidth - companion.offsetWidth, 8);
+      position.top = clamp(position.top, innerHeight - companion.offsetHeight, 8);
+      Object.assign(companion.style, { left: `${position.left}px`, top: `${position.top}px`, right: 'auto', bottom: 'auto' });
+    }
+    positionPanel(companion);
+  }
+  function enableDrag(companion, button, position) {
+    let pointer, moved = false;
+    button.addEventListener('pointerdown', event => {
+      if (!event.isTrusted || !event.isPrimary || event.button !== 0) return;
+      const { left, top } = companion.getBoundingClientRect();
+      pointer = { id: event.pointerId, x: event.clientX, y: event.clientY, left, top };
+      moved = false;
+      button.setPointerCapture(event.pointerId);
+    });
+    button.addEventListener('pointermove', event => {
+      if (!event.isTrusted || event.pointerId !== pointer?.id) return;
+      const dx = event.clientX - pointer.x, dy = event.clientY - pointer.y;
+      if (!moved && Math.hypot(dx, dy) < 5) return;
+      moved = true; companion.dataset.petDragging = '';
+      position.left = pointer.left + dx; position.top = pointer.top + dy;
+      place(companion, position);
+    });
+    button.addEventListener('lostpointercapture', event => {
+      if (event.pointerId !== pointer?.id) return;
+      pointer = null; delete companion.dataset.petDragging;
+    });
+    button.addEventListener('click', event => {
+      if (!moved || event.detail === 0) return;
+      event.preventDefault(); event.stopImmediatePropagation();
+    }, true);
+  }
   const styles = `
 .companion{pointer-events:auto;position:fixed;right:18px;bottom:16px;width:32px;height:36px;color:#263735;font:12px/1.65 -apple-system,BlinkMacSystemFont,'PingFang SC','Microsoft YaHei',sans-serif;text-align:left;letter-spacing:normal}
-.pet-button{display:grid;place-items:center;width:32px;height:36px;padding:0;border:0;border-radius:18px;background:transparent!important;cursor:pointer;filter:drop-shadow(0 2px 3px #17392712)}
+.pet-button{display:grid;place-items:center;width:32px;height:36px;padding:0;border:0;border-radius:18px;background:transparent!important;cursor:grab;touch-action:none;user-select:none;filter:drop-shadow(0 2px 3px #17392712)}
+[data-pet-dragging] .pet-button{cursor:grabbing}
 .pet-button .companion-cat{width:24px;height:26.6667px;overflow:visible;stroke:none;fill:none;flex-shrink:0}
 .cat-float{animation:cat-breathe 4s ease-in-out infinite;transform-origin:40px 78px}.cat-eyes{animation:cat-blink 5.8s infinite;transform-origin:40px 38px}.cat-tail{animation:cat-tail 4.3s ease-in-out infinite;transform-origin:57px 65px}.pet-button:hover .cat-paw,.pet-button:focus-visible .cat-paw{animation:cat-wave .9s ease-in-out 2;transform-origin:50px 75px}
-.pet-badge{position:absolute;top:2px;right:0;width:5px;height:5px;border-radius:50%;background:#3c8a73;pointer-events:none}
+.pet-progress{appearance:none;position:absolute;inset-inline:4px;bottom:0;width:24px;height:2px;margin:0;border:0;border-radius:2px;overflow:hidden;pointer-events:none}
+.pet-progress::-webkit-progress-bar{background:#8caaa077}
+.pet-progress::-webkit-progress-value{background:#3c8a73}
 .pet-panel{position:absolute;right:0;bottom:45px;width:320px;max-width:calc(100vw - 24px);max-height:calc(100vh - 82px);overflow:auto;padding:16px;background:#fff;border:1px solid #d5e1d7;border-radius:13px;box-shadow:0 10px 35px #17392722;animation:pet-open .16s ease-out}
 .pet-top,.pet-modes,.pet-actions,.pet-footer{display:flex;align-items:center;gap:7px}.pet-top{justify-content:space-between;margin-bottom:14px}.pet-top strong{display:flex;align-items:center;gap:7px;font-size:14px;font-weight:600}.pet-panel button{font:inherit;min-height:36px;padding:7px 9px;border-radius:7px}.pet-top .pet-close{width:32px;min-height:32px;padding:6px;display:grid;place-items:center}.pet-modes{padding:3px;border:1px solid #e1e8df;border-radius:9px;margin-bottom:12px}.pet-modes button{flex:1;font-size:12px;white-space:nowrap}.pet-modes [aria-pressed=true]{color:#006665;background:#edf4ee}.pet-main{width:100%;justify-content:center;margin:2px 0 8px;min-height:40px!important}.pet-status,.pet-cache{font-size:11px;color:#607466;margin:8px 0;overflow-wrap:anywhere}.pet-cache{color:#477563}.pet-error{color:#9a3932;font-size:11px;line-height:1.8;margin:8px 0}.pet-actions{flex-wrap:wrap;margin-top:8px}.pet-actions button{font-size:11px;border:1px solid #dfe7de}.pet-panel progress{display:block;width:100%;height:4px;accent-color:#006665;margin:10px 0}.pet-footer{justify-content:space-between;border-top:1px solid #e8ede5;margin-top:13px;padding-top:7px}.pet-footer button{font-size:11px;color:#607466}.companion [hidden]{display:none!important}
 @keyframes cat-breathe{0%,100%{transform:translateY(0)}50%{transform:translateY(-1.5px)}}@keyframes cat-blink{0%,43%,47%,100%{transform:scaleY(1)}45%{transform:scaleY(.1)}}@keyframes cat-tail{0%,100%{transform:rotate(-3deg)}50%{transform:rotate(7deg)}}@keyframes cat-wave{0%,100%{transform:rotate(0)}50%{transform:rotate(-18deg)}}@keyframes pet-open{from{opacity:0;transform:translateY(5px)}to{opacity:1;transform:translateY(0)}}
 @media(max-width:500px){.companion{right:12px;bottom:12px}.pet-panel{width:310px}}@media(prefers-reduced-motion:reduce){.cat-float,.cat-eyes,.cat-tail,.cat-paw,.pet-panel{animation:none!important}}
 `;
-  globalThis.ShiyiCompanion = Object.freeze({ createSVG, styles });
+  globalThis.ShiyiCompanion = Object.freeze({ createSVG, enableDrag, place, positionPanel, styles });
 })();

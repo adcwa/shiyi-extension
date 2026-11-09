@@ -37,6 +37,34 @@
     }
     cache.set(parent, true); return true;
   }
+  function viewportCandidates(records) {
+    const viewport = { top: 0, left: 0, right: innerWidth, bottom: innerHeight };
+    const clips = new Map(), onscreen = [], offscreen = [];
+    function clip(element) {
+      if (!element || element === document.documentElement || element === document.scrollingElement) return viewport;
+      if (clips.has(element)) return clips.get(element);
+      const parent = clip(element.parentElement);
+      const { overflowX, overflowY } = getComputedStyle(element);
+      let bounds = parent;
+      if (overflowX !== 'visible' || overflowY !== 'visible') {
+        const rect = element.getBoundingClientRect(), left = rect.left + element.clientLeft, top = rect.top + element.clientTop;
+        bounds = { ...parent };
+        if (overflowX !== 'visible') { bounds.left = Math.max(parent.left, left); bounds.right = Math.min(parent.right, left + element.clientWidth); }
+        if (overflowY !== 'visible') { bounds.top = Math.max(parent.top, top); bounds.bottom = Math.min(parent.bottom, top + element.clientHeight); }
+      }
+      clips.set(element, bounds); return bounds;
+    }
+    for (const record of records) {
+      const { owner } = record, rect = owner.getBoundingClientRect(), bounds = clip(owner.parentElement);
+      if (Math.min(bounds.right, rect.right) > Math.max(bounds.left, rect.left) && Math.min(bounds.bottom, rect.bottom) > Math.max(bounds.top, rect.top)) {
+        onscreen.push({ record, navigation: Number(!!owner.closest('nav,header,footer,aside')), top: Math.max(bounds.top, rect.top) });
+      } else {
+        const distance = Math.max(bounds.top - rect.bottom, rect.top - bounds.bottom, 0) + Math.max(bounds.left - rect.right, rect.left - bounds.right, 0);
+        offscreen.push({ record, distance });
+      }
+    }
+    return { onscreen, offscreen };
+  }
   function selectedOwners(range) {
     const owners = new Set(), root = range.commonAncestorContainer;
     if (root.nodeType === Node.TEXT_NODE) { const owner = ownerOf(root); if (owner) owners.add(owner); return owners; }
@@ -140,7 +168,7 @@
     let collecting = false, running = false, paused = false, allowance = 400, charAllowance = 120000, observer, routeTimer, themeObserver;
     let pageHandle = null, writerReady = false, freshRead = false, cachedCount = 0, restoredCount = 0, cacheError = '', localLoading = false, lookupRevision = 0;
     const themeMedia = matchMedia('(prefers-color-scheme: dark)');
-    const requests = new Set(), originals = new WeakMap();
+    const requests = new Set(), originals = new WeakMap(), loading = new Map();
     const valid = record => record.owner.isConnected && record.slots.every(slot => slot.node.isConnected && slot.node.data === (slot.applied ?? slot.source)) && (!record.inline || Inline.current(record.inline));
     function status() {
       const completed = records.filter(record => record.status === 'done').length, failed = records.filter(record => record.status === 'error').length, waiting = records.filter(record => ['queued', 'pending'].includes(record.status)).length;
@@ -151,6 +179,25 @@
     function write(work) {
       observer?.disconnect();
       try { return bridge.mutate(work); } finally { observe(); }
+    }
+    function showLoading(batch) {
+      for (const record of batch) {
+        if (loading.has(record) || !valid(record)) continue;
+        const indicator = document.createElement('span');
+        indicator.dataset.shiyiRoot = '';
+        indicator.dataset.shiyiBlockLoading = '';
+        indicator.setAttribute('aria-hidden', 'true');
+        if (record.whole) record.owner.append(indicator);
+        else record.slots.at(-1).node.after(indicator);
+        loading.set(record, indicator);
+      }
+    }
+    function removeLoading(record) {
+      loading.get(record)?.remove();
+      loading.delete(record);
+    }
+    function clearLoading(batch = loading.keys()) {
+      for (const record of batch) removeLoading(record);
     }
     function restoreRecord(record) {
       for (const element of record.elements || [record.element]) element?.remove();
@@ -173,9 +220,10 @@
       }
     }
     function render(record) {
-      if (!valid(record)) { restoreRecord(record); record.status = 'stale'; newContent = true; return; }
+      if (!valid(record)) { removeLoading(record); restoreRecord(record); record.status = 'stale'; newContent = true; return; }
       restoreRecord(record);
       if (record.status !== 'done') return;
+      removeLoading(record);
       const source = record.slots.filter(slot => !slot.locked).map(slot => slot.source).join('');
       if (nativeRecord(record, bridge.prefs().targetLanguage) || globalThis.ShiyiText.normalize(source) === globalThis.ShiyiText.normalize(record.translation)) { record.painted = true; return; }
       record.compact = compactControl(record);
@@ -243,20 +291,24 @@
     async function translateRecord(record, token) {
       record.status = 'pending'; emit();
       try {
-        for (let index = 0; index < record.chunks.length; index++) {
+        for (let index = record.outputs.length; index < record.chunks.length; index++) {
           if (!active || token !== generation || paused) return;
           if (!valid(record)) { record.status = 'stale'; newContent = true; return; }
-          if (record.outputs[index]) continue;
           const parts = record.chunks[index].map(({ id, text }) => ({ id, text }));
           if (!/[\p{L}]/u.test(parts.map(part => part.text.replace(/⟦SHIYI_\d+⟧/g, '')).join(''))) { record.outputs[index] = { parts, translation: parts.map(part => part.text).join('') }; continue; }
           const requestId = crypto.randomUUID(); requests.add(requestId);
-          try { record.outputs[index] = await bridge.send('TRANSLATE_BLOCK', { requestId, parts, fresh: freshRead }); }
+          let output;
+          try { output = await bridge.send('TRANSLATE_BLOCK', { requestId, parts, fresh: freshRead }); }
           finally { requests.delete(requestId); }
           if (!active || token !== generation || paused) return;
           // An independent background event handles each bounded chunk, allowing
           // MV3's worker to suspend between requests without losing page state.
-          const output = record.outputs[index];
           output.parts = output.parts.map(part => ({ ...part, text: preserveSpace(parts.find(item => item.id === part.id).text, part.text) }));
+          record.outputs[index] = output;
+          if (index < record.chunks.length - 1) {
+            // Keep partial results, but let a new viewport take the next slot.
+            record.status = 'queued'; return true;
+          }
         }
         if (!active || token !== generation || paused) return;
         if (!valid(record)) { record.status = 'stale'; newContent = true; return; }
@@ -304,7 +356,7 @@
         if (error.connectionsExhausted || ['MODEL_NOT_CONFIGURED', 'MISSING_KEY', 'MODEL_PERMISSION', 'HTTP_401', 'HTTP_403', 'HTTP_429', 'SITE_DISABLED', 'DISCONNECTED'].includes(error.code)) { paused = true; cancelRequests(); }
       } finally { requests.delete(requestId); if (active && token === generation) emit(); }
     }
-    function cancelRequests() { for (const requestId of requests) bridge.send('CANCEL', { requestId }).catch(() => {}); requests.clear(); }
+    function cancelRequests() { for (const requestId of requests) bridge.send('CANCEL', { requestId }).catch(() => {}); requests.clear(); clearLoading(); }
     async function run(retry = false, more = false) {
       if (!active || running || collecting) return;
       if (more) { allowance += 400; charAllowance += 120000; }
@@ -317,39 +369,65 @@
       if (!current(token)) return;
       const unpainted = records.filter(record => record.status === 'done' && !record.painted);
       if (unpainted.length) anchored(() => unpainted.forEach(render));
-      function prioritize(queue) {
-        const priority = new Map(queue.map((record, index) => {
-          const rect = record.owner.getBoundingClientRect(), visible = rect.bottom > 0 && rect.top < innerHeight;
-          const chrome = !!record.owner.closest('nav,header,footer,aside');
-          return [record, [visible ? 0 : 1, visible && chrome ? 1 : 0, visible ? Math.max(0, rect.top) : Math.min(Math.abs(rect.top), Math.abs(rect.top - innerHeight)), index]];
-        }));
-        queue.sort((a, b) => { const x = priority.get(a), y = priority.get(b); for (let index = 0; index < x.length; index++) if (x[index] !== y[index]) return x[index] - y[index]; return 0; });
-      }
       const counted = records.filter(record => ['done', 'error'].includes(record.status));
-      const candidates = records.filter(record => ['queued', 'pending'].includes(record.status));
-      // Choose the initial budget around the current viewport, even on a feed
-      // longer than 400 blocks. Continue still controls any additional budget.
-      prioritize(candidates);
-      const queue = []; let chars = counted.reduce((sum, record) => sum + record.characters, 0), budget = allowance - counted.length;
-      for (const record of candidates) {
-        if (budget-- <= 0 || chars >= charAllowance) break;
-        chars += record.characters; queue.push(record);
-      }
-      let firstBatch = true;
-      function nextBatch() {
-        // Re-evaluate scrolling between bounded batches. A single first block
-        // avoids delaying the first useful text behind a larger response.
-        prioritize(queue);
-        const batch = Text.takeBatch(queue, firstBatch ? 1 : bridge.prefs().batchSize); firstBatch = false; return batch;
-      }
-      async function worker() {
-        while (queue.length && active && token === generation && !paused) {
-          const batch = nextBatch();
-          if (batch.length === 1) await translateRecord(batch[0], token);
-          else await translateRecords(batch, token);
+      const pending = new Set(records.filter(record => record.status === 'queued')), reserved = new Set(), inFlight = new Set();
+      let chars = counted.reduce((sum, record) => sum + record.characters, 0), budget = allowance - counted.length;
+      let firstBatch = true, wake, frame = 0;
+      function dispatch() {
+        // Reserve budget at dispatch so scrolling can select any unsent block.
+        const hasBudget = budget > 0 && chars < charAllowance;
+        const eligible = [...pending].filter(record => record.status === 'queued' && (hasBudget || reserved.has(record)));
+        const { onscreen, offscreen } = viewportCandidates(eligible);
+        const background = !onscreen.length;
+        // Leave the second request slot available when only offscreen work remains.
+        if (background && inFlight.size) return false;
+        const ranked = background ? offscreen.sort((a, b) => a.distance - b.distance) : onscreen.sort((a, b) => a.navigation - b.navigation || a.top - b.top);
+        const limit = firstBatch ? 1 : Text.batchLimits(bridge.prefs().batchSize).maxBlocks;
+        const queue = []; let remaining = budget, size = chars;
+        for (const { record } of ranked) {
+          if (!reserved.has(record)) {
+            if (remaining <= 0 || size >= charAllowance) break;
+            remaining--; size += record.characters;
+          }
+          queue.push(record);
+          if (queue.length >= limit) break;
         }
+        const batch = Text.takeBatch(queue, limit);
+        if (!batch.length) return false;
+        for (const record of batch) {
+          pending.delete(record);
+          if (!reserved.has(record)) { budget--; chars += record.characters; reserved.add(record); }
+        }
+        firstBatch = false;
+        showLoading(batch);
+        const task = batch.length === 1 ? translateRecord(batch[0], token) : translateRecords(batch, token);
+        inFlight.add(task);
+        Promise.allSettled([task]).then(([result]) => {
+          if (result.status === 'fulfilled' && result.value === true) pending.add(batch[0]);
+          else clearLoading(batch);
+          inFlight.delete(task);
+          wake?.();
+        });
+        return true;
       }
-      await Promise.allSettled([worker(), worker()]);
+      function viewportChanged() {
+        if (inFlight.size === 2 || frame) return;
+        frame = requestAnimationFrame(() => { frame = 0; wake?.(); });
+      }
+      window.addEventListener('scroll', viewportChanged, { capture: true, passive: true });
+      window.addEventListener('resize', viewportChanged);
+      try {
+        while (current(token) && !paused) {
+          while (inFlight.size < 2 && !paused && dispatch()) {}
+          if (!inFlight.size) break;
+          await new Promise(resolve => { wake = resolve; });
+        }
+        await Promise.allSettled(inFlight);
+      } finally {
+        window.removeEventListener('scroll', viewportChanged, true);
+        window.removeEventListener('resize', viewportChanged);
+        if (frame) cancelAnimationFrame(frame);
+      }
       if (!active || token !== generation) return;
       running = false; records.forEach(record => { if (record.status === 'pending') record.status = 'queued'; });
       phase = paused ? 'paused' : 'complete';
@@ -371,7 +449,7 @@
         });
         if (!external) { if (changes.some(change => change.type === 'attributes' && !change.target.closest?.(own))) updateTheme(); return; }
         newContent = true;
-        write(() => { for (const record of records) if (!valid(record)) { restoreRecord(record); record.status = 'stale'; } });
+        write(() => { for (const record of records) if (!valid(record)) { removeLoading(record); restoreRecord(record); record.status = 'stale'; } });
         emit();
       });
       observe();

@@ -5,7 +5,7 @@ does not claim to evaluate a real vendor's translation quality.
 """
 from pathlib import Path
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
-from threading import Thread, Lock
+from threading import Thread, Lock, Event
 from playwright.sync_api import sync_playwright, expect
 import json, os, shutil, tempfile, time
 
@@ -36,19 +36,24 @@ window.guideNode=document.getElementById('guide');window.buttonNode=document.get
 GIANT = '<!doctype html><html><head><meta charset="utf-8"><title>Large blocks</title></head><body><h1>Large document</h1><p id="giant">' + ('A long paragraph retains every sentence and meaningful detail. ' * 180) + '</p></body></html>'
 DUPLICATES = '<!doctype html><html><body>' + '<p>A shared repeated navigation label.</p>' * 16 + '</body></html>'
 MANY = '<!doctype html><html><body>' + ''.join('<p>Budget paragraph number '+str(i)+'.</p>' for i in range(405)) + '</body></html>'
+SCROLL_FEED = '<!doctype html><html><style>#feed{height:64px;overflow:auto}p{height:64px;margin:0}</style><body><main id="feed">' + ''.join(f'<p id="viewport-{i}">Viewport paragraph number {i}.</p>' for i in range(620)) + '</main></body></html>'
+release_background = Event()
 
 class Handler(BaseHTTPRequestHandler):
     def log_message(self, *args): pass
     def do_GET(self):
         self.send_response(200); self.send_header('Content-Type','text/html;charset=utf-8'); self.end_headers()
-        self.wfile.write((GIANT if self.path.startswith('/giant') else DUPLICATES if self.path.startswith('/duplicates') else MANY if self.path.startswith('/many') else ARTICLE).encode())
+        self.wfile.write((GIANT if self.path.startswith('/giant') else DUPLICATES if self.path.startswith('/duplicates') else MANY if self.path.startswith('/many') else SCROLL_FEED if self.path.startswith('/viewport') else ARTICLE).encode())
     def do_POST(self):
         payload=json.loads(self.rfile.read(int(self.headers.get('Content-Length',0)))); data=json.loads(payload['messages'][-1]['content'])
         with guard:
-            calls.append({'data':data,'auth':self.headers.get('Authorization'),'cookie':self.headers.get('Cookie')})
             mode=control['mode'];control['active']+=1;control['peak']=max(control['peak'],control['active'])
+            parts = data.get('parts', []) if data.get('task') != 'blocks' else [part for block in data['blocks'] for part in block['parts']]
+            background = mode == 'viewport' and any(0 < int(part['text'].removeprefix('Viewport paragraph number ').rstrip('.')) < 500 for part in parts if part['text'].startswith('Viewport paragraph number '))
+            calls.append({'data':data,'auth':self.headers.get('Authorization'),'cookie':self.headers.get('Cookie'),'held':background})
         try:
             if mode=='slow':time.sleep(1.5)
+            if background:release_background.wait(8)
             if mode in ('401','429'):self.send_response(int(mode));self.end_headers();return
             if data.get('task') in ('block','blocks'):
                 def translated(parts):
@@ -88,6 +93,12 @@ def complete(ui,tab):
         ui.wait_for_timeout(60)
     raise AssertionError({'completion_timeout':value})
 def command(ui,tab,action,mode=None):return message(ui,'PAGE_COMMAND',tabId=tab,action=action,**({'mode':mode} if mode else {}))
+def open_popup(ui, tab):
+    with ui.expect_popup() as opened:
+        ui.evaluate('()=>{window.open("about:blank")}')
+    popup=opened.value
+    popup.goto(ui.url.split('/options.html')[0]+'/popup.html?tab='+str(tab))
+    return popup
 def passed(name,detail=None):
     report['checks'].append({'name':name,'result':'pass',**({'detail':detail} if detail else {})});print('PASS:',name,flush=True)
 def snap(page,name):
@@ -109,8 +120,36 @@ try:
             initial=article.locator('main').inner_html();tab=ui.evaluate('async origin=>(await chrome.tabs.query({})).find(t=>t.url===origin+"/reading").id',origin)
             assert message(ui,'UI_STATE',tabId=tab)['tab']['enabled']
             article.locator('#note').fill('DO_NOT_SEND_CHANGED_FORM_VALUE')
-            popup=context.new_page();popup.goto(base+'/popup.html?tab='+str(tab));popup.get_by_role('button',name='翻译整页',exact=True).click()
+            article.evaluate('window.scrollTo(0,0)')
+            lead_before=article.locator('#lead').bounding_box()
+            control['mode']='slow'
+            popup=open_popup(ui,tab)
+            with popup.expect_event('close'):
+                popup.get_by_role('button',name='翻译整页',exact=True).click()
+            reader=article.locator('#shiyi-extension-root')
+            loading=article.locator('[data-shiyi-block-loading]')
+            lead_indicator=article.locator('#lead > [data-shiyi-block-loading]')
+            expect(lead_indicator).to_have_css('opacity','0.65')
+            assert article.locator('#lead').bounding_box()==lead_before
+            expect(article.locator('#lead')).to_have_text(P1+P2+P3)
+            strip=reader.locator('.pet-progress')
+            expect(strip).to_be_visible()
+            expect(strip).to_have_css('height','2px')
+            toggle=reader.locator('[data-pet-toggle]')
+            expect(toggle).to_have_attribute('aria-expanded','false')
+            start=toggle.bounding_box()
+            article.mouse.move(start['x']+start['width']/2,start['y']+start['height']/2)
+            article.mouse.down();article.mouse.move(52,68,steps=8);article.mouse.up()
+            end=toggle.bounding_box()
+            assert abs(end['x']+end['width']/2-52)<2 and abs(end['y']+end['height']/2-68)<2,(start,end)
+            expect(toggle).to_have_attribute('aria-expanded','false')
+            expect(reader.locator('.toast')).to_have_count(0)
+            expect(strip).not_to_have_attribute('value','0')
             result=complete(ui,tab);assert result['completed']>=18 and result['failed']==0,result
+            control['mode']='ok'
+            expect(strip).to_be_hidden()
+            expect(loading).to_have_count(0)
+            passed('The popup closes after dispatch; the draggable cat stays collapsed with a thin live progress bar, and pending paragraphs show a layout-neutral indicator until done')
             assert message(ui,'UI_STATE',tabId=tab)['tab']['enabled'] and message(ui,'UI_STATE')['blacklist']==[]
             assert article.locator('[data-shiyi-mark],[data-shiyi-meaning]').count()==0
             assert article.locator('[data-shiyi-block-translation]').count()==result['completed']
@@ -119,7 +158,7 @@ try:
             expect(article.locator('#lead + [data-shiyi-block-translation]')).to_contain_text('好奇心')
             lead=article.locator('#lead').bounding_box();translated=article.locator('#lead + [data-shiyi-block-translation]').bounding_box()
             article.screenshot(path=str(OUT/'bilingual-reading-preview.png'),clip={'x':lead['x']-12,'y':lead['y']-12,'width':lead['width']+24,'height':translated['y']+translated['height']-lead['y']+24},animations='disabled',caret='initial')
-            snap(article,'page-bilingual.png');popup.bring_to_front();popup.wait_for_timeout(1200);snap(popup,'page-popup.png');popup.close()
+            snap(article,'page-bilingual.png');popup=open_popup(ui,tab);popup.bring_to_front();popup.wait_for_timeout(1200);snap(popup,'page-popup.png');popup.close()
             passed('One click translates a default-on page without any per-site activation, including headings, paragraphs, navigation, controls, lists and table cells into independent bilingual blocks',result)
             payload=json.dumps(calls,ensure_ascii=False)
             for forbidden in ['DO_NOT_SEND','const privateExample','fake-page-reader-fixture-key']:
@@ -133,6 +172,7 @@ try:
             bar=article.locator('#shiyi-extension-root').get_by_role('region',name='点译阅读控制')
             pet=article.locator('#shiyi-extension-root').get_by_role('button',name='点译小猫，展开功能',exact=True)
             expect(pet).to_have_attribute('aria-expanded','false');pet.click();bar.get_by_role('button',name='仅译文',exact=True).click()
+            assert bar.evaluate('node=>{const r=node.getBoundingClientRect();return r.left>=0&&r.top>=0&&r.right<=innerWidth&&r.bottom<=innerHeight}')
             expect(article.locator('#guide')).to_have_text('阅读指南');expect(article.locator('#save')).to_have_text('收藏文章')
             assert article.locator('[data-shiyi-block-translation],[data-shiyi-mark],[data-shiyi-meaning]').count()==0
             assert article.evaluate('guideNode===document.getElementById("guide")&&buttonNode===document.getElementById("save")&&leadNode===document.getElementById("lead").firstChild')
@@ -148,15 +188,16 @@ try:
             assert article.evaluate('guideNode===document.getElementById("guide")&&leadNode===document.getElementById("lead").firstChild')
             passed('Translation-only updates the original text nodes, preserves link/button handlers and form state, switches without another model call, and restores exact original markup')
 
-            popup=context.new_page();popup.goto(base+'/popup.html?tab='+str(tab))
+            popup=open_popup(ui,tab)
             expect(popup.locator('#page-translate')).to_have_text('加载本地译文')
             popup.locator('#page-mode').select_option('translation')
             expect(popup.locator('#page-mode')).to_have_value('translation')
-            popup.locator('#page-translate').click()
+            with popup.expect_event('close'):
+                popup.locator('#page-translate').click()
             assert complete(ui,tab)['mode']=='translation'
             expect(article.locator('#lead')).to_contain_text('好奇心')
             assert len(calls)==before
-            command(ui,tab,'restore');popup.close()
+            command(ui,tab,'restore')
             passed('popup restores cached blocks in the selected reading mode without a model request')
 
             # Subsequent jobs reuse only block-cache data, not vocabulary entries.
@@ -208,6 +249,23 @@ try:
             command(ui,many_tab,'restore');many.close()
             passed('Large feeds include the current viewport beyond the first 400 DOM blocks, pause at the budget, and explicitly continue the remaining five blocks')
 
+            feed=context.new_page();feed.goto(origin+'/viewport');feed_tab=ui.evaluate('async url=>(await chrome.tabs.query({})).find(t=>t.url===url).id',feed.url)
+            try:
+                before=len(calls);control['mode']='viewport';command(ui,feed_tab,'translate','translation')
+                expect(feed.locator('#viewport-0')).to_have_text('译文：Viewport paragraph number 0.')
+                deadline=time.monotonic()+3
+                while not any(call['held'] for call in calls[before:]) and time.monotonic()<deadline:feed.wait_for_timeout(25)
+                assert any(call['held'] for call in calls[before:]),'Expected a slow background batch'
+                feed.locator('#feed').evaluate('node=>node.scrollTop=560*64')
+                expect(feed.locator('#viewport-560')).to_have_text('译文：Viewport paragraph number 560.',timeout=3000)
+                assert not release_background.is_set()
+            finally:
+                control['mode']='ok';release_background.set()
+            result=complete(ui,feed_tab)
+            assert result['completed']==400 and result['waiting']==220 and result['failed']==0 and control['peak']<=2,result
+            command(ui,feed_tab,'restore');feed.close()
+            passed('Scrolling inside a clipped feed translates the newly visible block beyond the initial 400 without waiting for the slow background batch or expanding the budget')
+
             duplicate=context.new_page();duplicate.goto(origin+'/duplicates');duplicate_tab=ui.evaluate('async url=>(await chrome.tabs.query({})).find(t=>t.url===url).id',duplicate.url)
             before=len(calls);command(ui,duplicate_tab,'translate','bilingual');result=complete(ui,duplicate_tab)
             assert result['completed']==16 and len(calls)-before<=2,(result,len(calls)-before)
@@ -223,7 +281,9 @@ try:
                 if partial and partial['completed']>0:break
                 ui.wait_for_timeout(60)
             assert partial['running'] and partial['completed']>0,partial
-            command(ui,tab,'stop');paused=complete(ui,tab);assert paused['phase']=='paused' and paused['completed']>=partial['completed'] and paused['waiting']>0,paused
+            expect(loading.first).to_be_attached()
+            command(ui,tab,'stop');expect(loading).to_have_count(0)
+            paused=complete(ui,tab);assert paused['phase']=='paused' and paused['completed']>=partial['completed'] and paused['waiting']>0,paused
             ui.wait_for_timeout(150);assert status(ui,tab)['completed']==paused['completed'],'Stopped work must not keep applying delayed results'
             before=len(calls);command(ui,tab,'mode','translation');assert len(calls)==before
             control['mode']='ok';command(ui,tab,'resume');result=complete(ui,tab);assert result['completed']==result['total'] and result['failed']==0,result
@@ -231,6 +291,7 @@ try:
             command(ui,tab,'restore');passed('Stop retains completed blocks, mode switching works while paused, and resume requests only unfinished work')
             fresh_model('alignment');control['mode']='alignment';command(ui,tab,'translate','translation');result=complete(ui,tab)
             assert result['failed']==1 and result['completed']>=17,result
+            expect(loading).to_have_count(0)
             expect(article.locator('#alignment a')).to_have_text('the important link')
             control['mode']='ok';before=len(calls);command(ui,tab,'retry');result=complete(ui,tab);assert result['failed']==0 and len(calls)==before+1,result
             command(ui,tab,'restore');passed('Malformed multi-part output keeps its original paragraph and retry only requests the failed block')
@@ -249,7 +310,7 @@ try:
 
             fresh_model('cancel');control['mode']='slow';before=len(calls);command(ui,tab,'translate','translation')
             ui.wait_for_function('''async id=>(await chrome.runtime.sendMessage({type:'SHIYI/UI_STATE',tabId:id})).data.tab.page.running''',arg=tab)
-            article.wait_for_timeout(150);command(ui,tab,'restore');article.wait_for_timeout(1800)
+            expect(loading.first).to_be_attached();command(ui,tab,'restore');expect(loading).to_have_count(0);article.wait_for_timeout(1800)
             assert not status(ui,tab)['active'] and article.locator('[data-shiyi-block-translation],[data-shiyi-mark],[data-shiyi-meaning]').count()==0
             expect(article.locator('#guide')).to_have_text('the reading guide');assert message(ui,'LIBRARY')['entries']==[]
             passed('Restoring during delayed HTTP requests cancels pending work and late results cannot overwrite the original page')

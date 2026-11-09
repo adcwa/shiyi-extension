@@ -88,6 +88,10 @@ try:
 
             assert message('UI_STATE')['prefs']['batchSize']==16
             passed('Fresh and legacy-compatible preferences default to 16 blocks with independent light and dark color pickers')
+            # A viewport batch deliberately excludes offscreen blocks. Make all
+            # 65 visible to exercise the configured limit after the first request.
+            viewport = article.viewport_size
+            article.set_viewport_size({**viewport, 'height': 3300})
             for size in [16,32,64]:
                 batch_size(size);model('prefs-'+str(size));command('translate','translation');result=complete()
                 assert result['completed']==65 and result['failed']==0,result
@@ -95,6 +99,7 @@ try:
                 maximum=max(len(c.get('blocks',[])) or 1 for c in requests);assert maximum==size,(size,maximum)
                 command('restore');assert article.locator('main').inner_html()==initial
                 passed(str(size)+'-block requests map every reversed block and fragment to the correct text, link and emphasis, then restore exact HTML',{'maximum_observed_batch':maximum,'requests':len(requests)})
+            article.set_viewport_size(viewport)
 
             batch_size(16);model('prefs-corrupt');control['mode']='corrupt';command('translate','translation');result=complete()
             assert result['failed']==2 and result['completed']==63,result

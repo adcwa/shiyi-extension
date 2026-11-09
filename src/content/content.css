@@ -20,6 +20,28 @@ span[data-shiyi-meaning] {
   user-select: none !important;
   padding: 0 2px !important;
 }
+/* Use the text's trailing position without adding a line or a flex item. */
+span[data-shiyi-block-loading] {
+  all: unset;
+  display: inline-block !important;
+  position: absolute !important;
+  box-sizing: border-box !important;
+  inline-size: .8em !important;
+  block-size: .8em !important;
+  margin-inline-start: .4em !important;
+  margin-block-start: .25em !important;
+  border: .1em solid currentColor !important;
+  border-inline-end-color: transparent !important;
+  border-radius: 50% !important;
+  pointer-events: none !important;
+  opacity: 0;
+  animation: shiyi-block-loading-in 0s .15s forwards, shiyi-block-loading-spin .8s linear infinite !important;
+}
+@keyframes shiyi-block-loading-in { to { opacity: .65; } }
+@keyframes shiyi-block-loading-spin { to { transform: rotate(1turn); } }
+@media (prefers-reduced-motion: reduce) {
+  span[data-shiyi-block-loading] { animation: shiyi-block-loading-in 0s .15s forwards !important; }
+}
 /* Translation text only: inherit page flow, without fills, borders or cards. */
 [data-shiyi-block-translation] {
   --shiyi-translation-ink: #245e4d;

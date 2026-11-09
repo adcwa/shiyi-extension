@@ -12,7 +12,7 @@
   let events, observer, host, shadow, panel, toastNode, closeTimer, toastTimer, currentRequest, lastSelection, keyboardAnchor, suppressFocus = false;
   let scanRoots = new Set(), idleHandle, scanGeneration = 0, dragging = false;
   let readerBar, readerRevision = '', readerLayout = 'auto', longEntries = new Map(), contextSelection, menuReading = false;
-  let petVisible = false, petOpen = false, petError = '', modelConfigured = false, pageRestoreKey = '', lastDocumentURL = '', routeWatch;
+  let petVisible = false, petOpen = false, petPosition = {}, modelConfigured = false, pageRestoreKey = '', lastDocumentURL = '', routeWatch;
   let changingToolLanguage = false;
   // Each source text run retains its page-owned first node. Incremental updates
   // may remove an inner decoration before a preceding one; pairwise before/after
@@ -113,6 +113,7 @@
       readerBar = el('section', { class: 'companion', 'aria-label': '点译阅读助手' });
       const toggle = button('', () => { petOpen = !petOpen; renderReader(reader.status()); }, 'pet-button');
       toggle.dataset.petToggle = ''; toggle.setAttribute('aria-controls', 'dianyi-pet-menu'); toggle.append(Companion.createSVG());
+      Companion.enableDrag(readerBar, toggle, petPosition);
       const details = el('div', { class: 'pet-panel', id: 'dianyi-pet-menu', role: 'region', 'aria-label': '点译阅读控制', hidden: true });
       const close = button('', () => { petVisible = false; petOpen = false; renderReader(reader.status()); }, 'pet-close', 'close'); close.setAttribute('aria-label', '关闭小猫'); close.title = '关闭小猫，再次点击工具栏点译图标可显示';
       const modes = el('div', { class: 'pet-modes', role: 'group', 'aria-label': '页面译文显示方式' });
@@ -136,24 +137,25 @@
         el('p', { class: 'pet-status', role: 'status', 'aria-live': 'polite' }), progress,
         el('p', { class: 'pet-cache' }), el('p', { class: 'pet-error' }), actions,
         el('div', { class: 'pet-footer' }, button('我的词库', () => send('OPEN_OPTIONS', { section: 'library' }).catch(error => showToast(error.message))), button('翻译设置', () => send('OPEN_OPTIONS', { section: 'translation' }).catch(error => showToast(error.message)))));
-      readerBar.append(toggle, el('span', { class: 'pet-badge', 'aria-hidden': 'true' }), details); shadow.append(readerBar);
+      const strip = el('progress', { class: 'pet-progress', 'aria-label': '页面翻译进度', max: 1, value: 0, hidden: true });
+      readerBar.append(toggle, strip, details); shadow.append(readerBar);
+      Companion.place(readerBar, petPosition);
     }
-    if (state.error && state.error !== petError) petOpen = true;
-    petError = state.error;
     const toggle = readerBar.querySelector('[data-pet-toggle]');
     toggle.setAttribute('aria-label', petOpen ? '点译小猫，收起功能' : '点译小猫，展开功能'); toggle.setAttribute('aria-expanded', String(petOpen));
     readerBar.querySelector('.pet-panel').hidden = !petOpen;
-    toggle.title = state.running ? `点译：已翻译 ${state.completed} / ${state.total} 块` : '点译 · 点击展开功能';
-    readerBar.querySelector('.pet-badge').hidden = !state.running;
+    const strip = readerBar.querySelector('.pet-progress');
+    strip.hidden = !state.running || petOpen; strip.max = state.total || 1; strip.value = state.completed;
     readerBar.querySelectorAll('[data-reader-mode]').forEach(item => item.setAttribute('aria-pressed', String(item.dataset.readerMode === state.mode)));
     const primary = readerBar.querySelector('[data-reader-main]'); primary.hidden = state.active;
     primary.lastChild.textContent = state.cached ? '加载本地译文' : modelConfigured ? '翻译当前页面' : '连接翻译模型';
     readerBar.querySelector('.pet-status').textContent = state.localLoading ? '正在读取本页暂存…' : state.phase === 'collecting' ? '正在识别页面内容…' : state.active ? `已翻译 ${state.completed} / ${state.total} 块${state.running ? ' · 进行中' : state.phase === 'paused' ? ' · 已停止' : state.waiting ? ' · 可继续' : ' · 已完成'}` : '点一下，翻译当前页面。';
-    const progress = readerBar.querySelector('progress'); progress.hidden = !state.active; progress.max = state.total || 1; progress.value = state.completed;
+    const progress = readerBar.querySelector('.pet-panel progress'); progress.hidden = !state.active; progress.max = state.total || 1; progress.value = state.completed;
     readerBar.querySelector('.pet-cache').textContent = state.cacheError || (state.restored ? `已从本地加载 ${state.restored} 块${state.newContent ? '，页面有新内容。' : '，无需重复请求。'}` : state.cached ? '本页译文已暂存在此浏览器。' : '翻译后自动暂存，刷新可直接恢复。');
     readerBar.querySelector('.pet-error').textContent = state.error || '';
     for (const [name, show] of Object.entries({ stop: state.running, resume: state.active && !state.running && state.waiting > 0, retry: state.active && !state.running && state.failed > 0, refresh: state.active && !state.running && state.newContent, retranslate: state.active || state.cached > 0, restore: state.active })) readerBar.querySelector(`[data-reader-action="${name}"]`).hidden = !show;
     readerBar.querySelector('[data-reader-setup]').hidden = !['MODEL_NOT_CONFIGURED', 'MISSING_KEY', 'MODEL_PERMISSION', 'HTTP_401', 'HTTP_403', 'CODEX_UNAVAILABLE', 'CODEX_AUTH', 'CODEX_PERMISSION', 'CODEX_MODEL', 'CODEX_CAPABILITY'].includes(state.errorCode);
+    Companion.positionPanel(readerBar);
   }
   function hidePanel() { clearTimeout(closeTimer); panel?.remove(); panel = null; }
   function scheduleHide() {
@@ -580,7 +582,10 @@
     }, options);
     document.addEventListener('keyup', event => { if (event.key === 'Shift' && !event.composedPath().includes(host)) captureSelection(); }, options);
     window.addEventListener('scroll', () => { if (!currentRequest) hidePanel(); }, { capture: true, passive: true, signal: events.signal });
-    window.addEventListener('resize', () => { if (!currentRequest) hidePanel(); }, { signal: events.signal });
+    window.addEventListener('resize', () => {
+      if (!currentRequest) hidePanel();
+      if (readerBar?.isConnected) Companion.place(readerBar, petPosition);
+    }, { signal: events.signal });
     window.addEventListener('pagehide', () => { reader.stop(); if (currentRequest) send('CANCEL', { requestId: currentRequest.id }).catch(() => {}); }, { signal: events.signal });
     observer = new MutationObserver(records => {
       for (const record of records) {
@@ -594,7 +599,7 @@
     for (const type of ['popstate', 'hashchange']) window.addEventListener(type, () => refresh().catch(() => {}), { signal: events.signal });
   }
   function deactivate() {
-    enabled = false; events?.abort(); observer?.disconnect(); scanGeneration++; clearInterval(routeWatch); petVisible = false; petOpen = false; pageRestoreKey = ''; lastDocumentURL = '';
+    enabled = false; events?.abort(); observer?.disconnect(); scanGeneration++; clearInterval(routeWatch); petVisible = false; petOpen = false; petPosition = {}; pageRestoreKey = ''; lastDocumentURL = '';
     reader.restore();
     if (idleHandle) cancelIdle(idleHandle); idleHandle = null; scanRoots.clear();
     currentRequest = null; contextSelection = null; dragging = false; clearAnnotations(); hidePanel();
@@ -609,7 +614,7 @@
     if (enabled && signature === snapshot) return;
     const routeChanged = lastDocumentURL && lastDocumentURL !== location.href;
     const activeTool = !routeChanged && panel?.classList.contains('selection-tool') ? lastSelection : null;
-    if (routeChanged) { petVisible = false; petOpen = false; }
+    if (routeChanged) { petVisible = false; petOpen = false; petPosition = {}; }
     if (reader.status().active && (routeChanged || readerRevision !== state.translationSignature)) { reader.restore(); if (!routeChanged) showToast('翻译设置已更改，已恢复原文；请重新翻译页面。'); }
     lastDocumentURL = location.href; modelConfigured = state.modelConfigured;
     readerRevision = state.translationSignature;
@@ -645,7 +650,10 @@
       refresh().then(async () => {
         if (!enabled) respond({ ok: false, error: { code: 'SITE_DISABLED', message: '当前网站已在黑名单中停用，或浏览器未允许网站访问。' } });
         else if (message.action === 'show-companion') { petVisible = true; petOpen = false; renderReader(reader.status()); respond({ ok: true, data: { visible: true } }); }
-        else respond({ ok: true, data: await reader.command(message.action, message.mode) });
+        else {
+          if (message.showProgress) { petVisible = true; petOpen = false; renderReader(reader.status()); }
+          respond({ ok: true, data: await reader.command(message.action, message.mode) });
+        }
       }).catch(() => respond({ ok: false, error: { code: 'PAGE_CHANGED', message: '页面尚未就绪，请刷新后重试。' } }));
       return true;
     }

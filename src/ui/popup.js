@@ -87,12 +87,16 @@ function render() {
 }
 async function action(task, target) {
   if (busy) return; busy = true; if (target) target.disabled = true;
-  try { await task(); await load(); }
+  try { await task(); if (!window.closed) await load(); }
   catch (error) { notify(error.message); await load().catch(() => {}); }
   finally { busy = false; if (target?.isConnected) target.disabled = false; }
 }
 async function setSiteEnabled(enabled) {
   await api('BLACKLIST_SET', { site: state.tab.blockingSite || state.tab.origin, blocked: !enabled });
+}
+async function startReading(command) {
+  await api('PAGE_COMMAND', { tabId, action: command, mode: pageMode, showProgress: true });
+  window.close();
 }
 root.addEventListener('click', event => {
   const button = event.target.closest('button'); if (!button) return;
@@ -110,14 +114,18 @@ root.addEventListener('click', event => {
   if (button.dataset.open) { api('OPEN_OPTIONS', { section: button.dataset.open }).then(() => window.close()).catch(error => notify(error.message)); return; }
   if (button.id === 'page-translate') {
     action(async () => {
-      if (state.tab?.enabled && state.tab.page?.cached) { await api('PAGE_COMMAND', { tabId, action: 'load-local', mode: pageMode }); return; }
+      if (state.tab?.enabled && state.tab.page?.cached) { await startReading('load-local'); return; }
       if (!hasUsableConnection(state, 'translation')) { await api('OPEN_OPTIONS', { section: 'model' }); return; }
       if (!state.tab.permitted && !await requestHost(state.tab.origin)) throw new Error('请在浏览器扩展详情中允许点译访问网站。');
       if (state.tab.blocked) await setSiteEnabled(true);
-      await api('PAGE_COMMAND', { tabId, action: 'translate', mode: pageMode });
+      await startReading('translate');
     }, button); return;
   }
-  if (button.dataset.pageCommand) { action(() => api('PAGE_COMMAND', { tabId, action: button.dataset.pageCommand }), button); return; }
+  if (button.dataset.pageCommand) {
+    const command = button.dataset.pageCommand;
+    action(() => ['resume', 'retry', 'refresh', 'retranslate'].includes(command) ? startReading(command) : api('PAGE_COMMAND', { tabId, action: command }), button);
+    return;
+  }
   if (button.id === 'site-switch') { action(() => setSiteEnabled(!state.tab.enabled), button); return; }
   if (button.id === 'website-access') { action(async () => { if (!await requestHost(state.tab.origin)) throw new Error('请在浏览器扩展详情中允许点译访问网站。'); }, button); return; }
 });

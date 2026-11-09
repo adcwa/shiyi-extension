@@ -98,11 +98,11 @@ async function tabState(tabId, value) {
       blocked: !!blockedBy, blockingSite: blockedBy, enabled: !!origin && granted && !blockedBy };
   } catch { return null; }
 }
-async function pageCommand(tabId, action, mode) {
+async function pageCommand(tabId, action, mode, showProgress = false) {
   const state = await tabState(tabId, await settings.config());
   assert(state?.supported, 'UNSUPPORTED_PAGE', '请在普通网页中使用点译。');
   assert(state.enabled, 'SITE_DISABLED', state.blocked ? '当前网站已加入黑名单，恢复此网站后即可翻译。' : '请在浏览器扩展详情中允许点译访问网站。');
-  const message = { type: 'SHIYI/PAGE_CONTROL', action, mode };
+  const message = { type: 'SHIYI/PAGE_CONTROL', action, mode, showProgress };
   let result;
   try { result = await chrome.tabs.sendMessage(tabId, message, { frameId: 0 }); }
   catch { await inject(tabId); result = await chrome.tabs.sendMessage(tabId, message, { frameId: 0 }); }
@@ -265,7 +265,7 @@ async function handle(message, sender) {
       assert(Number.isInteger(message.tabId), 'INVALID_INPUT', '没有找到当前页面。');
       assert(['translate', 'retranslate', 'load-local', 'mode', 'restore', 'stop', 'resume', 'refresh', 'retry', 'show-companion'].includes(message.action), 'INVALID_INPUT', '不支持的页面操作。');
       assert(message.mode === undefined || ['bilingual', 'translation'].includes(message.mode), 'INVALID_INPUT', '请选择双语对照或仅译文。');
-      return pageCommand(message.tabId, message.action, message.mode);
+      return pageCommand(message.tabId, message.action, message.mode, message.showProgress === true);
     }
     case 'SHIYI/CANCEL': {
       await requireContent(sender);
