@@ -4,7 +4,7 @@ import { PAGE_TTL, MAX_PAGES, MAX_PAGE_TOTAL_BYTES, openedPage, patchedPage } fr
 let opening;
 function database() {
   if (!opening) opening = new Promise((resolve, reject) => {
-    const request = indexedDB.open('shiyi-vocabulary', 2);
+    const request = indexedDB.open('shiyi-vocabulary', 3);
     request.onupgradeneeded = () => {
       const db = request.result;
       if (!db.objectStoreNames.contains('entries')) {
@@ -16,6 +16,10 @@ function database() {
       if (!db.objectStoreNames.contains('pages')) {
         const pages = db.createObjectStore('pages', { keyPath: 'id' });
         pages.createIndex('updatedAt', 'updatedAt'); pages.createIndex('readyUntil', ['ready', 'expiresAt']);
+      }
+      if (!db.objectStoreNames.contains('explanations')) {
+        const explanations = db.createObjectStore('explanations', { keyPath: 'id' });
+        explanations.createIndex('entryId', 'entryId'); explanations.createIndex('updatedAt', 'updatedAt');
       }
     };
     request.onsuccess = () => { const db = request.result; db.onversionchange = () => { db.close(); opening = null; }; resolve(db); };
@@ -63,17 +67,18 @@ export async function commitTranslation(entry, expectedEpoch) {
   });
 }
 export async function editEntry(id, translation) {
-  return transaction(['entries', 'meta', 'cache'], 'readwrite', async tx => {
+  return transaction(['entries', 'meta', 'cache', 'explanations'], 'readwrite', async tx => {
     const store = tx.objectStore('entries'), entry = await result(store.get(id));
     if (!entry) throw new AppError('NOT_FOUND', '这个词句已经被删除。');
     entry.translation = translation; entry.updatedAt = Date.now(); store.put(entry);
+    await removeExplanations(tx, entry);
     tx.objectStore('cache').clear(); await bump(tx); return entry;
   });
 }
 export async function removeEntries(ids, scope) {
-  return transaction(['entries', 'meta', 'cache', 'trash'], 'readwrite', async tx => {
+  return transaction(['entries', 'meta', 'cache', 'trash', 'explanations'], 'readwrite', async tx => {
     const store = tx.objectStore('entries'), trash = tx.objectStore('trash'), removed = [];
-    for (const id of ids) { const entry = await result(store.get(id)); if (entry) { removed.push(entry); store.delete(id); } }
+    for (const id of ids) { const entry = await result(store.get(id)); if (entry) { removed.push(entry); store.delete(id); await removeExplanations(tx, entry); } }
     for (const record of await result(trash.getAll())) if (record.expiresAt < Date.now()) trash.delete(record.id);
     const token = crypto.randomUUID();
     trash.put({ id: token, entries: removed, scope, expiresAt: Date.now() + 8000 });
@@ -113,6 +118,44 @@ export async function cacheWrite(id, value, expectedEpoch) {
     store.put({ id, value, expiresAt: Date.now() + 7 * 86400000 });
   });
 }
+async function removeExplanations(tx, entry) {
+  const store = tx.objectStore('explanations');
+  for (const entryId of [entry.id, `word:${entryIdentity(entry.text, entry.targetLanguage)}`]) {
+    for (const id of await result(store.index('entryId').getAllKeys(entryId))) store.delete(id);
+  }
+}
+const sameExplanationEntry = (a, b) => a && a.text === b.text && a.translation === b.translation && a.targetLanguage === b.targetLanguage && a.updatedAt === b.updatedAt;
+async function explanationEntry(tx, entry) {
+  const entries = tx.objectStore('entries');
+  return entry.id ? result(entries.get(entry.id)) : result(entries.index('identity').get(entryIdentity(entry.text, entry.targetLanguage)));
+}
+export const explanationRead = id => transaction(['explanations'], 'readwrite', async tx => {
+  const store = tx.objectStore('explanations'), record = await result(store.get(id));
+  if (!record?.text) return null;
+  record.updatedAt = Date.now(); store.put(record);
+  return { text: record.text, modelName: record.modelName, updatedAt: record.updatedAt };
+});
+export const explanationOpen = (id, entry) => transaction(['entries', 'explanations'], 'readwrite', async tx => {
+  const current = await explanationEntry(tx, entry);
+  if (entry.id && !sameExplanationEntry(current, entry)) throw new AppError('LIBRARY_CHANGED', '词句已更新，请重新打开释义后再补充。');
+  const store = tx.objectStore('explanations'), previous = await result(store.get(id)), revision = crypto.randomUUID();
+  store.put({ ...previous, id, entryId: current?.id || `word:${entryIdentity(entry.text, entry.targetLanguage)}`, revision, updatedAt: Date.now() });
+  const excess = await result(store.count()) - 1000;
+  if (excess > 0) {
+    const oldest = await result(store.index('updatedAt').getAllKeys(undefined, excess + 1));
+    for (const key of oldest.filter(key => key !== id).slice(0, excess)) store.delete(key);
+  }
+  return revision;
+});
+export const explanationWrite = (id, revision, entry, output) => transaction(['entries', 'explanations'], 'readwrite', async tx => {
+  const store = tx.objectStore('explanations'), record = await result(store.get(id));
+  if (!record || record.revision !== revision) return false;
+  const current = await explanationEntry(tx, entry);
+  if (entry.id && !sameExplanationEntry(current, entry)) return false;
+  if (typeof output.text !== 'string' || !output.text.trim() || output.text.length > 80000) throw new AppError('INVALID_RESULT', '补充解释内容不完整，未保存到本地。');
+  store.put({ ...record, entryId: current?.id || record.entryId, text: output.text, modelName: String(output.modelName || '').slice(0, 160), updatedAt: Date.now() });
+  return true;
+});
 async function writePage(tx, page, previous) {
   const pages = tx.objectStore('pages'), meta = tx.objectStore('meta');
   page.bytes ||= new TextEncoder().encode(JSON.stringify(page)).byteLength;

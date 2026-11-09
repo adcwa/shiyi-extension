@@ -9,10 +9,10 @@
   const languages = { 'zh-CN': '简体中文', en: 'English', ja: '日本語', ko: '한국어', fr: 'Français', de: 'Deutsch', es: 'Español' };
   const languageNames = { 'zh-CN': '中文', en: '英语', ja: '日语', ko: '韩语', fr: '法语', de: '德语', es: '西班牙语' };
   let enabled = false, prefs = {}, entries = new Map(), trie = Text.compile([]), snapshot = '', refreshVersion = 0;
-  let events, observer, host, shadow, panel, toastNode, closeTimer, toastTimer, currentRequest, lastSelection, keyboardAnchor, suppressFocus = false;
+  let events, observer, host, shadow, panel, toastNode, closeTimer, toastTimer, currentRequest, explanationRequest, lastSelection, keyboardAnchor, suppressFocus = false;
   let scanRoots = new Set(), idleHandle, scanGeneration = 0, dragging = false;
   let readerBar, readerRevision = '', readerLayout = 'auto', longEntries = new Map(), contextSelection, menuReading = false;
-  let petVisible = false, petOpen = false, petPosition = {}, modelConfigured = false, pageRestoreKey = '', lastDocumentURL = '', routeWatch;
+  let petVisible = false, petOpen = false, petPosition = {}, modelConfigured = false, summaryConfigured = false, pageRestoreKey = '', lastDocumentURL = '', routeWatch;
   let changingToolLanguage = false;
   // Each source text run retains its page-owned first node. Incremental updates
   // may remove an inner decoration before a preceding one; pairwise before/after
@@ -61,6 +61,24 @@
     // must not spend a user's model quota, edit the glossary or change reading.
     return el('button', { type: 'button', class: className, onclick: event => { if (event.isTrusted) return action(event); } }, ...(glyph ? [icon(glyph)] : []), label);
   }
+  function copyButton(label, text, className = '') {
+    const control = button(label, async () => {
+      const value = text(); if (!value) return;
+      try {
+        try { await navigator.clipboard.writeText(value); }
+        catch {
+          const focus = shadow.activeElement, field = el('textarea', { 'aria-hidden': 'true' });
+          field.value = value; field.style.cssText = 'position:fixed;left:-10000px;top:0';
+          shadow.append(field); field.select();
+          try { if (!document.execCommand('copy')) throw new Error('复制未成功，请选择文本后复制。'); }
+          finally { field.remove(); focus?.focus({ preventScroll: true }); }
+        }
+        control.textContent = '已复制';
+        setTimeout(() => { if (control.isConnected) control.textContent = label; }, 1600);
+      } catch (error) { showToast(error.message || '复制未成功，请选择文本后复制。'); }
+    }, className);
+    control.setAttribute('aria-label', label); return control;
+  }
   async function send(type, payload = {}) {
     let response;
     try { response = await chrome.runtime.sendMessage({ type: `SHIYI/${type}`, ...payload }); }
@@ -71,7 +89,20 @@
   const uiStyle = `:host{all:initial}*{box-sizing:border-box}svg{width:16px;height:16px;fill:none;stroke:currentColor;stroke-width:1.7;stroke-linecap:round;stroke-linejoin:round;flex-shrink:0}button,input{font:inherit}button{cursor:pointer;border:0;background:none;color:inherit}button:focus-visible,input:focus-visible,[tabindex]:focus-visible{outline:2px solid #006665;outline-offset:3px}button:hover{background:#eaf2e9}button:disabled{opacity:.6;cursor:wait}.panel{pointer-events:auto;position:fixed;max-width:calc(100vw - 24px);max-height:calc(100vh - 24px);overflow:auto;background:#fff;color:#263735;border:1px solid #ccdcd0;border-radius:13px;box-shadow:0 12px 44px #1739272b;font:13px/1.75 -apple-system,BlinkMacSystemFont,'Segoe UI','PingFang SC','Microsoft YaHei',sans-serif;text-align:left;letter-spacing:normal;word-break:normal}.tool{display:flex;gap:4px;padding:5px;align-items:center;border-radius:9px;width:max-content;flex-wrap:wrap}.tool button{padding:8px 11px;border-radius:6px;display:flex;align-items:center;gap:6px;white-space:nowrap;font-size:12px}.tool .primary,.primary{background:#006665;color:#fff}.tool .primary:hover,.primary:hover{background:#005251}.tool label{display:flex;align-items:center;gap:4px;font-size:10px;padding:5px 4px;cursor:pointer;white-space:nowrap}.tool input{accent-color:#006665;width:13px;height:13px}.card{width:320px;border-radius:10px;box-shadow:0 6px 26px #17392720}
 .inside{padding:16px}
 .meaning{font-size:16px;font-weight:500;line-height:1.7;white-space:pre-wrap;overflow-wrap:anywhere;color:var(--shiyi-translation-ink,#263d34)}
+.meaning-row{display:flex;align-items:flex-start;gap:8px}.meaning-row .meaning{flex:1;min-width:0}
+.copy-translation{flex:none;padding:4px 0;font-size:11px;color:#657268;border-radius:4px}
 .source-text{font-size:12px;font-weight:400;line-height:1.6;color:#657268;margin:8px 0 0;white-space:pre-wrap;overflow-wrap:anywhere;max-height:96px;overflow:auto;scrollbar-width:thin}
+.explanation-toggle{display:flex;align-items:center;gap:4px;padding:5px 0;margin-top:7px;font-size:12px;color:#006665;border-radius:4px}
+.explanation-toggle svg{width:12px;height:12px;transition:transform .15s}
+.explanation-toggle[aria-expanded=true] svg{transform:rotate(180deg)}
+.explanation[hidden]{display:none}
+.explanation{margin-top:8px;padding-top:12px;border-top:1px solid #e8ede7}
+.explanation-head{display:flex;align-items:center;justify-content:space-between;gap:8px;margin-bottom:8px}
+.explanation-status{font-size:11px;color:#657268;min-width:0;overflow-wrap:anywhere}
+.explanation-controls{display:flex;align-items:center;justify-content:flex-end;gap:8px;flex-wrap:wrap;flex-shrink:0;max-width:55%}
+.explanation-controls button{font-size:11px;padding:3px;color:#506459}
+.explanation-body{font-size:13px;line-height:1.85;white-space:pre-wrap;overflow-wrap:anywhere;color:#30493d}
+.explanation-error{font-size:12px;color:#9a3932;margin:8px 0 0;line-height:1.7}
 .meta{font-size:11px;color:#657268}
 .foot{padding:5px 8px 5px 16px;border-top:1px solid #e8ede7;display:flex;align-items:center;justify-content:space-between;gap:8px}
 .card-actions{display:flex;align-items:center;gap:2px}
@@ -157,10 +188,21 @@
     readerBar.querySelector('[data-reader-setup]').hidden = !['MODEL_NOT_CONFIGURED', 'MISSING_KEY', 'MODEL_PERMISSION', 'HTTP_401', 'HTTP_403', 'CODEX_UNAVAILABLE', 'CODEX_AUTH', 'CODEX_PERMISSION', 'CODEX_MODEL', 'CODEX_CAPABILITY'].includes(state.errorCode);
     Companion.positionPanel(readerBar);
   }
-  function hidePanel() { clearTimeout(closeTimer); panel?.remove(); panel = null; }
+  function stopExplanation() {
+    if (!explanationRequest) return;
+    const current = explanationRequest; explanationRequest = null;
+    send('CANCEL', { requestId: current.id }).catch(() => {});
+    current.stopped();
+  }
+  function hidePanel() {
+    clearTimeout(closeTimer);
+    if (explanationRequest?.background) explanationRequest = null;
+    else stopExplanation();
+    panel?.remove(); panel = null;
+  }
   function scheduleHide() {
     clearTimeout(closeTimer);
-    closeTimer = setTimeout(() => { if (!panel?.contains(shadow?.activeElement) && !currentRequest) hidePanel(); }, 230);
+    closeTimer = setTimeout(() => { if (!panel?.dataset.explanationPinned && !panel?.contains(shadow?.activeElement) && !currentRequest) hidePanel(); }, 230);
   }
   function position(node, rect) {
     const pad = 12, width = node.offsetWidth, height = node.offsetHeight;
@@ -183,14 +225,84 @@
     }));
     toastNode = node; shadow.append(node); toastTimer = setTimeout(() => node.remove(), token ? 8000 : 4500);
   }
-  function showSaved(entry, anchor, keyboard = false, rectOverride) {
+  function nearbyContext(anchor, text) {
+    if (!anchor?.isConnected) return '';
+    const owner = anchor.closest('p,li,blockquote,td,th,figcaption,div,article,section') || anchor;
+    const full = contextText(owner);
+    const index = owner === anchor ? full.indexOf(text) : contextText(owner, anchor).length;
+    return full.slice(Math.max(0, index - 180), Math.max(0, index) + text.length + 180).trim().slice(0, 1200);
+  }
+  function addExplanation(node, entry, context, rect, automatic = false) {
+    const body = el('div', { class: 'explanation-body' });
+    const status = el('span', { class: 'explanation-status', role: 'status', 'aria-live': 'polite' }, '总结模型 · 结合附近语境');
+    const error = el('p', { class: 'explanation-error', role: 'alert', hidden: true });
+    const section = el('section', { class: 'explanation', id: `shiyi-explanation-${crypto.randomUUID()}`, 'aria-label': '补充解释', lang: entry.targetLanguage, hidden: true });
+    let completed = false, loading = false, needsSetup = false, retryFresh = false;
+    const reposition = () => { if (panel === node) position(node, rect); };
+    const stop = button('停止', stopExplanation);
+    const retry = button('重试', () => generate(retryFresh));
+    const regenerate = button('重新补充', () => generate(true));
+    const copy = copyButton('复制补充', () => body.textContent);
+    copy.setAttribute('aria-label', '复制补充解释'); copy.disabled = true;
+    regenerate.title = '使用总结模型重新生成，更新本页已保存的解释';
+    const setup = button('配置总结模型', () => send('OPEN_OPTIONS', { section: 'model-summary' }).catch(e => showToast(e.message)));
+    retry.hidden = true; stop.hidden = true; setup.hidden = true; regenerate.hidden = true;
+    const close = button('', () => currentRequest?.node === node ? cancelTranslation() : hidePanel(), 'close', 'close'); close.setAttribute('aria-label', '关闭释义');
+    section.append(el('div', { class: 'explanation-head' }, status, el('div', { class: 'explanation-controls' }, stop, retry, regenerate, copy, setup, close)), body, error);
+    const more = button('展开更多', () => {
+      section.hidden = !section.hidden;
+      more.setAttribute('aria-expanded', String(!section.hidden));
+      more.firstChild.textContent = section.hidden ? '展开更多' : '收起补充';
+      if (section.hidden) delete node.dataset.explanationPinned;
+      else { node.dataset.explanationPinned = 'true'; if (!completed && !loading && error.hidden) generate(); }
+      reposition();
+    }, 'explanation-toggle');
+    more.append(icon('chevron'));
+    more.setAttribute('aria-expanded', 'false'); more.setAttribute('aria-controls', section.id);
+    more.title = '使用总结模型，结合附近语境补充解释';
+    node.querySelector('.inside').append(more, section);
+    if (automatic) generate();
+    async function generate(fresh = false) {
+      if (loading || panel !== node) return;
+      stopExplanation();
+      const id = crypto.randomUUID(), url = location.href;
+      loading = true; completed = false; retryFresh = fresh;
+      if (!fresh) body.textContent = '';
+      copy.disabled = !body.textContent;
+      error.hidden = true; retry.hidden = true; regenerate.hidden = true; setup.hidden = true; stop.hidden = false;
+      section.setAttribute('aria-busy', 'true'); status.textContent = fresh ? '正在重新补充…' : '正在加载解释…';
+      const finish = () => { loading = false; stop.hidden = true; section.setAttribute('aria-busy', 'false'); };
+      const update = text => { body.textContent = text; copy.disabled = !text; status.textContent = '正在结合语境补充…'; reposition(); };
+      explanationRequest = { id, url, background: automatic, update, stopped: () => { finish(); status.textContent = '已停止补充'; retry.hidden = false; reposition(); } };
+      reposition();
+      try {
+        const result = await send('EXPLAIN', { requestId: id, ...(entry.id ? { entryId: entry.id } : { text: entry.text }), context, fresh });
+        if (explanationRequest?.id !== id || panel !== node || location.href !== url) return;
+        explanationRequest = null; finish(); update(result.text); completed = true; regenerate.hidden = false;
+        status.textContent = `${result.reused ? '本地解释' : '补充完成'} · ${result.modelName}${result.saved === false ? ' · 本地保存未完成' : ''}`;
+      } catch (failure) {
+        if (explanationRequest?.id !== id || panel !== node) return;
+        explanationRequest = null; finish(); status.textContent = body.textContent ? '已保留收到的内容' : '补充未完成';
+        needsSetup = ['SUMMARY_NOT_CONFIGURED', 'MISSING_KEY', 'MODEL_PERMISSION', 'HTTP_401', 'HTTP_403', 'CODEX_AUTH', 'CODEX_PERMISSION', 'CODEX_UNAVAILABLE', 'CODEX_MODEL', 'CODEX_CAPABILITY'].includes(failure.code);
+        error.textContent = failure.message; error.hidden = false; retry.hidden = false; setup.hidden = !needsSetup; reposition();
+      }
+    }
+  }
+  function showSaved(entry, anchor, keyboard = false, rectOverride, context, options = {}) {
     if (!enabled) return;
+    if (panel?.dataset.explanationPinned && !keyboard) return;
     const rect = rectOverride || anchor?.getBoundingClientRect(); if (!rect) return;
     keyboardAnchor = anchor;
-    const node = newPanel('card', rect, `${entry.text} 的已存释义`);
-    node.append(el('div', { class: 'inside' },
-      el('div', { class: 'meaning', lang: entry.targetLanguage }, entry.translation),
-      el('div', { class: 'source-text', lang: entry.sourceLanguage || 'und', 'aria-label': '原文' }, entry.text)));
+    const node = options.node === panel && panel?.isConnected ? panel : newPanel('card', rect, `${entry.text} 的已存释义`);
+    node.setAttribute('aria-label', `${entry.text} 的已存释义`);
+    let inside = node.querySelector('.inside');
+    if (!inside) { inside = el('div', { class: 'inside' }); node.append(inside); }
+    inside.querySelectorAll(':scope > .meaning,:scope > .meaning-row,:scope > .source-text').forEach(item => item.remove());
+    inside.prepend(el('div', { class: 'meaning-row' },
+      el('div', { class: 'meaning', lang: entry.targetLanguage }, entry.translation), copyButton('复制译文', () => entry.translation, 'copy-translation')),
+      el('div', { class: 'source-text', lang: entry.sourceLanguage || 'und', 'aria-label': '原文' }, entry.text));
+    if (!node.querySelector('.explanation')) addExplanation(node, entry, context ?? nearbyContext(anchor, entry.text), rect, options.automatic);
+    node.querySelector('.foot')?.remove();
     const remove = button('删除', async () => {
       try { const result = await send('DELETE', { id: entry.id }); hidePanel(); await refresh(); showToast(`已删除 ${result.removed} 个词句并移除对应标记`, result.token); }
       catch (error) { showToast(error.message); }
@@ -199,7 +311,7 @@
     const edit = button('编辑', () => send('OPEN_OPTIONS', { section: 'library', entryId: entry.id }).catch(error => showToast(error.message)), '', 'edit');
     node.append(el('div', { class: 'foot' },
       el('span', { class: 'meta', title: `${languages[entry.targetLanguage] || entry.targetLanguage} · 本地词库` }, '已存释义'),
-      el('div', { class: 'card-actions' }, edit, remove)));
+      el('div', { class: 'card-actions' }, copyButton('复制全部', () => [entry.text, entry.translation, node.querySelector('.explanation-body')?.textContent].filter(Boolean).join('\n\n')), edit, remove)));
     node.addEventListener('pointerleave', scheduleHide); position(node, rect); if (keyboard) node.focus({ preventScroll: true });
   }
   function showTool(selection) {
@@ -211,7 +323,7 @@
     const main = button(name, () => {
       if (changingToolLanguage) return;
       if (blockMode) { getSelection()?.removeAllRanges(); reader.start({ owners: selection.owners, mode: 'bilingual' }); }
-      else if (existing) { getSelection()?.removeAllRanges(); showSaved(existing, null, true, selection.rect); }
+      else if (existing) { getSelection()?.removeAllRanges(); showSaved(existing, null, true, selection.rect, selection.context, { automatic: summaryConfigured }); }
       else translate(selection);
     }, 'primary selection-main');
     const actionName = blockMode ? `按段翻译为${name}` : existing ? `查看${name}释义` : `翻译为${name}`;
@@ -280,32 +392,47 @@
     node.append(el('div', { class: 'inside' },
       el('div', { class: 'meaning', role: 'status' }, el('span', { class: 'spinner', 'aria-hidden': 'true' }), '正在翻译…'),
       el('div', { class: 'source-text', 'aria-label': '原文' }, selection.text)));
-    node.append(el('div', { class: 'foot' }, el('span', { class: 'hint' }, prefs.includeContext ? '本次会附带相邻一句语境' : '本次只发送选中的文本'), button('取消', cancelTranslation)));
+    node.append(el('div', { class: 'foot' }, el('span', { class: 'hint' }, summaryConfigured ? '翻译与语境补充并行生成' : prefs.includeContext ? '本次会附带相邻一句语境' : '本次只发送选中的文本'), button('取消', cancelTranslation)));
     position(node, selection.rect);
+    return node;
   }
-  function showError(selection, error) {
-    const node = newPanel('card', selection.rect, '翻译未完成');
+  function showError(selection, error, existing) {
+    const node = existing === panel && panel?.isConnected ? panel : newPanel('card', selection.rect, '翻译未完成');
+    node.setAttribute('aria-label', '翻译未完成');
     const needSetup = ['MODEL_NOT_CONFIGURED', 'MISSING_KEY', 'MODEL_PERMISSION', 'HTTP_401', 'HTTP_403', 'CODEX_UNAVAILABLE', 'CODEX_AUTH', 'CODEX_PERMISSION', 'CODEX_MODEL', 'CODEX_CAPABILITY'].includes(error.code);
-    node.append(el('div', { class: 'inside' },
+    const meaning = node.querySelector('.meaning');
+    if (meaning) { meaning.textContent = error.message; meaning.classList.add('error'); meaning.setAttribute('role', 'alert'); }
+    else node.append(el('div', { class: 'inside' },
       el('div', { class: 'meaning error', role: 'alert' }, error.message),
       el('div', { class: 'source-text', 'aria-label': '原文' }, selection.text)));
+    node.querySelector('.foot')?.remove();
     node.append(el('div', { class: 'foot' }, button('关闭', hidePanel), button(needSetup ? '配置模型' : '重试', () => needSetup ? send('OPEN_OPTIONS', { section: 'model' }).catch(e => showToast(e.message)) : translate(selection), 'primary', 'arrow')));
     position(node, selection.rect);
   }
   async function translate(selection) {
     if (currentRequest || !enabled) return;
-    const id = crypto.randomUUID(); currentRequest = { id, selection }; showLoading(selection);
+    const id = crypto.randomUUID(), request = { id, selection, url: location.href };
+    currentRequest = request;
+    const node = showLoading(selection); request.node = node;
+    if (summaryConfigured) {
+      request.draft = { text: selection.text, translation: '', targetLanguage: prefs.targetLanguage };
+      addExplanation(node, request.draft, selection.context, selection.rect, true);
+    }
     try {
       const result = await send('TRANSLATE', { requestId: id, text: selection.text, ...(prefs.includeContext ? { context: selection.context } : {}), title: document.title.slice(0, 240) });
-      if (currentRequest?.id !== id || !enabled) return;
-      currentRequest = null; getSelection()?.removeAllRanges(); await refresh();
-      showSaved(result.entry, null, true, selection.rect); showToast(result.reused ? '已复用本地释义' : '翻译完成');
-    } catch (error) { if (currentRequest?.id === id && enabled) { currentRequest = null; showError(selection, error); } }
+      if (currentRequest?.id !== id || !enabled || location.href !== request.url) return;
+      if (request.draft) Object.assign(request.draft, result.entry);
+      getSelection()?.removeAllRanges(); await refresh();
+      if (currentRequest?.id !== id || !enabled || location.href !== request.url) return;
+      currentRequest = null;
+      showSaved(result.entry, null, true, selection.rect, selection.context, { node });
+      showToast(result.reused ? '已复用本地释义' : '翻译完成');
+    } catch (error) { if (currentRequest?.id === id && enabled && location.href === request.url) { currentRequest = null; showError(selection, error, node); } }
   }
   function cancelTranslation() {
     if (!currentRequest) return;
     const request = currentRequest; currentRequest = null;
-    send('CANCEL', { requestId: request.id }).catch(() => {}); showTool(request.selection); showToast('已取消本次翻译');
+    send('CANCEL', { requestId: request.id }).catch(() => {}); stopExplanation(); showTool(request.selection); showToast('已取消本次翻译');
   }
   function clearAnnotations(root = document) {
     for (const [element, owner] of legacyOwners) if (!element.isConnected || root === document || root.contains?.(owner)) { element.remove(); legacyOwners.delete(element); }
@@ -498,6 +625,15 @@
   function sourceText(root) {
     const clone = root.cloneNode(true); clone.querySelectorAll?.('[data-shiyi-meaning],[data-shiyi-root],[data-shiyi-block-translation]').forEach(node => node.remove()); return clone.textContent || '';
   }
+  function contextText(root, before) {
+    const walker = document.createTreeWalker(root, NodeFilter.SHOW_TEXT), visibility = new WeakMap();
+    let node, text = '';
+    while ((node = walker.nextNode())) {
+      if (before?.contains(node)) break;
+      if (validNode(node, visibility)) text += node.data;
+    }
+    return text.replace(/\s+/g, ' ');
+  }
   function readSelection() {
     if (!enabled || reader.status().active || currentRequest) return;
     const selection = getSelection();
@@ -509,7 +645,7 @@
     if (text.length > 16000) { showToast('长文可使用插件菜单中的“翻译当前页面”；单次选区最多 16000 个字符'); return; }
     const owners = Reader.selectedOwners(range), blockMode = text.length > LONG_TEXT || owners.size > 1;
     const ancestor = start.closest('p,li,blockquote,td,div,article,section') || start;
-    const fullContext = sourceText(ancestor).replace(/\s+/g, ' ').trim();
+    const fullContext = contextText(ancestor).trim();
     // Word translation only includes this bounded optional context. Page reading
     // is a separate explicit action with a separate block request and cache.
     const index = fullContext.indexOf(text), left = Math.max(0, index - 180), right = Math.min(fullContext.length, Math.max(index, 0) + text.length + 180);
@@ -586,7 +722,7 @@
       if (!currentRequest) hidePanel();
       if (readerBar?.isConnected) Companion.place(readerBar, petPosition);
     }, { signal: events.signal });
-    window.addEventListener('pagehide', () => { reader.stop(); if (currentRequest) send('CANCEL', { requestId: currentRequest.id }).catch(() => {}); }, { signal: events.signal });
+    window.addEventListener('pagehide', () => { reader.stop(); stopExplanation(); if (currentRequest) send('CANCEL', { requestId: currentRequest.id }).catch(() => {}); }, { signal: events.signal });
     observer = new MutationObserver(records => {
       for (const record of records) {
         const element = record.target.nodeType === Node.TEXT_NODE ? record.target.parentElement : record.target;
@@ -610,10 +746,16 @@
     try { state = await send('HELLO'); } catch { deactivate(); return; }
     if (version !== refreshVersion) return;
     if (!state.enabled) { if (enabled) deactivate(); snapshot = ''; return; }
+    summaryConfigured = state.summaryConfigured === true;
     const signature = JSON.stringify([location.href, state.prefs, state.translationSignature, state.entries.map(entry => [entry.id, entry.updatedAt])]);
     if (enabled && signature === snapshot) return;
     const routeChanged = lastDocumentURL && lastDocumentURL !== location.href;
     const activeTool = !routeChanged && panel?.classList.contains('selection-tool') ? lastSelection : null;
+    const activeCard = !routeChanged && currentRequest?.node === panel;
+    if (routeChanged && currentRequest) {
+      send('CANCEL', { requestId: currentRequest.id }).catch(() => {});
+      currentRequest = null;
+    }
     if (routeChanged) { petVisible = false; petOpen = false; petPosition = {}; }
     if (reader.status().active && (routeChanged || readerRevision !== state.translationSignature)) { reader.restore(); if (!routeChanged) showToast('翻译设置已更改，已恢复原文；请重新翻译页面。'); }
     lastDocumentURL = location.href; modelConfigured = state.modelConfigured;
@@ -623,7 +765,7 @@
     if (reader.status().active) return;
     scanGeneration++; if (idleHandle) cancelIdle(idleHandle); idleHandle = null; scanRoots.clear();
     if (!wasEnabled) activate();
-    if (activeTool) showTool(activeTool); else hidePanel();
+    if (activeTool) showTool(activeTool); else if (!activeCard) hidePanel();
     ensureUI();
     const cacheKey = JSON.stringify([location.href, readerRevision]);
     if (pageRestoreKey !== cacheKey) {
@@ -644,6 +786,10 @@
     if (sender.id !== chrome.runtime.id) return false;
     if (message?.type === 'SHIYI/PING') { respond({ alive: true }); return false; }
     if (message?.type === 'SHIYI/PAGE_STATUS') { respond(reader.status()); return false; }
+    if (message?.type === 'SHIYI/EXPLANATION_UPDATE') {
+      if (enabled && explanationRequest?.id === message.requestId && explanationRequest.url === location.href && typeof message.text === 'string') explanationRequest.update(message.text);
+      respond({ received: true }); return false;
+    }
     if (message?.type === 'SHIYI/CONTEXT_TRANSLATE') { contextTranslate(message.text).then(respond, () => respond({ ok: false })); return true; }
     if (message?.type === 'SHIYI/NOTICE') { if (enabled) showToast(String(message.text || '操作未完成，请重试。').slice(0, 240)); respond({ received: true }); return false; }
     if (message?.type === 'SHIYI/PAGE_CONTROL') {

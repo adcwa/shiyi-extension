@@ -12,11 +12,13 @@ import { createKnowledgeStore } from './lib/knowledge-store.js';
 import { createKnowledgeManager } from './lib/knowledge-manager.js';
 import { cleanSummaryProfile } from './lib/summary-presets.js';
 import { runSummaryModel } from './lib/summary-model.js';
+import { explanationIdentity, selectionExplanationIdentity, runExplanationModel } from './lib/explanation-model.js';
 import { runConnections } from './lib/connections.js';
 import { connectionPermission, nativeCodex } from './lib/codex.js';
 import { createVocabularyBackup, cleanVocabularyImport } from './lib/vocabulary-backup.js';
 
 const pending = new Map();
+const explanationJobs = new Map();
 const knowledgeNavigations=new Map();
 const backupNotices = new Set();
 const vocabularyBackup=createVocabularyBackup({store,storage:chrome.storage.local});
@@ -159,7 +161,7 @@ async function handle(message, sender) {
       await setBadge(sender.tab?.id, enabled);
       if (!enabled) return { enabled: false };
       knowledge.captureTab(sender.tab.id,{documentReady:true,visitToken:knowledgeNavigations.get(sender.tab.id)?.id}).catch(()=>{});
-      return { enabled: true, prefs: value.prefs, modelConfigured: !!value.profile.endpoint && !!value.profile.model, translationSignature: await translationSignature(value), entries: (await store.listEntries(value.prefs.targetLanguage)).map(publicEntry) };
+      return { enabled: true, prefs: value.prefs, modelConfigured: !!value.profile.endpoint && !!value.profile.model, summaryConfigured: !!value.summaryConfigured, translationSignature: await translationSignature(value), entries: (await store.listEntries(value.prefs.targetLanguage)).map(publicEntry) };
     }
     case 'SHIYI/PAGE_CACHE_LOAD': {
       const value = await requireContent(sender), id = await pageIdentity(sender, value, message.url);
@@ -185,6 +187,75 @@ async function handle(message, sender) {
       const tabs = await chrome.tabs.query({});
       await Promise.allSettled(tabs.map(tab => chrome.tabs.sendMessage(tab.id, { type: 'SHIYI/PAGE_CACHE_CLEARED' }, { frameId: 0 })));
       await broadcast(); return output;
+    }
+    case 'SHIYI/EXPLAIN': {
+      assert(sender.id === chrome.runtime.id && Number.isInteger(sender.tab?.id) && sender.frameId === 0 && sender.documentId, 'FORBIDDEN', '请从网页中的词句释义展开。');
+      const requestId = boundedText(message.requestId, 80, '请求标识');
+      const entryId = boundedText(message.entryId || '', 80, '词句标识', { optional: true });
+      const selectedText = entryId ? '' : boundedText(message.text, 1000, '待解释文本');
+      const context = boundedText(message.context || '', 1200, '附近语境', { optional: true });
+      const identity = `${sender.tab.id}:${sender.documentId}:${requestId}`;
+      assert(!pending.has(identity), 'BUSY', '正在补充这条释义，请稍候。');
+      const controller = new AbortController();
+      pending.set(identity, { controller, tabId: sender.tab.id, documentId: sender.documentId, origin: pageOrigin(sender.url), kind: 'explanation' });
+      let text = '', timer, sharedKey, sharedJob, completeShared;
+      const publish = () => {
+        timer = null;
+        if (!controller.signal.aborted) return chrome.tabs.sendMessage(sender.tab.id, { type: 'SHIYI/EXPLANATION_UPDATE', requestId, text }, { documentId: sender.documentId }).catch(() => controller.abort());
+      };
+      const heartbeat = setInterval(() => chrome.runtime.getPlatformInfo().catch(() => {}), 20000);
+      const deadline = setTimeout(() => controller.abort(), 180000);
+      try {
+        const value = await requireContent(sender);
+        const entry = entryId ? await store.getEntry(entryId) : await store.findEntry(selectedText, value.prefs.targetLanguage) || { text: selectedText, translation: '', targetLanguage: value.prefs.targetLanguage };
+        const tab = await chrome.tabs.get(sender.tab.id);
+        assert(entry, 'ENTRY_NOT_FOUND', '这条词句已删除，请重新划词翻译。');
+        assert(tab.url === sender.url && !controller.signal.aborted, 'CANCELLED', '网页已切换，补充解释已停止。');
+        const cacheId = await selectionExplanationIdentity(tab.url, entry, context);
+        if (message.fresh !== true) {
+          const cached = await store.explanationRead(cacheId) || (entry.id ? await store.explanationRead(await explanationIdentity(tab.url, entry, context)) : null);
+          assert(!controller.signal.aborted, 'CANCELLED', '补充解释已停止。');
+          if (cached) return { ...cached, reused: true, saved: true };
+          const existing = explanationJobs.get(cacheId);
+          if (existing) {
+            const outcome = await existing.promise;
+            assert(!controller.signal.aborted, 'CANCELLED', '补充解释已停止。');
+            if (outcome.error) throw outcome.error;
+            return { ...outcome.result, reused: true };
+          }
+        }
+        sharedKey = cacheId;
+        sharedJob = { promise: new Promise(resolve => { completeShared = resolve; }) };
+        explanationJobs.set(cacheId, sharedJob);
+        const revision = await store.explanationOpen(cacheId, entry);
+        const connected = await runConnections({
+          value, purpose: 'summary', signal: controller.signal, allowBackup: () => !text,
+          resolve: profile => resolveConnection(profile, 'summary'),
+          run: connection => runExplanationModel({
+            ...connection, entry, context, title: (tab.title || '').slice(0, 240), signal: controller.signal,
+            onDelta: chunk => {
+              if (controller.signal.aborted) return;
+              text += chunk;
+              if (!timer) timer = setTimeout(publish, 80);
+            }
+          })
+        });
+        const latest = await chrome.tabs.get(sender.tab.id);
+        assert(!controller.signal.aborted && latest.url === sender.url && await enabledSender(sender, await settings.config()), 'CANCELLED', '补充解释已停止。');
+        const modelName = connected.profile.name || connected.profile.model;
+        const saved = await store.explanationWrite(cacheId, revision, entry, { text, modelName }).catch(() => false);
+        const output = { text, modelName, reused: false, saved };
+        completeShared({ result: output });
+        return output;
+      } catch (error) {
+        completeShared?.({ error });
+        if (text) await publish();
+        throw error;
+      } finally {
+        clearTimeout(timer); clearTimeout(deadline); clearInterval(heartbeat);
+        if (explanationJobs.get(sharedKey) === sharedJob) explanationJobs.delete(sharedKey);
+        pending.delete(identity);
+      }
     }
     case 'SHIYI/TRANSLATE': {
       const value = await requireContent(sender), text = boundedText(message.text, 1000, '待译文本');
@@ -409,7 +480,7 @@ async function handle(message, sender) {
       summaries.cancelAll('总结模型已变更，旧任务已停止。');
       const output = await settings.saveSummaryProfile(profile, message.apiKey, { ...(Object.hasOwn(message, 'connectionId') ? { id: message.connectionId } : {}), makeDefault: message.makeDefault === true }); await knowledge.resume(); await broadcast(); return output;
     }
-    case 'SHIYI/CLEAR_SUMMARY_KEY': uiOnly(sender); summaries.cancelAll('总结密钥已清除，生成已停止。'); await settings.clearSummaryCredential(); await broadcast(); return {};
+    case 'SHIYI/CLEAR_SUMMARY_KEY': uiOnly(sender); summaries.cancelAll('总结密钥已清除，生成已停止。'); abortRequests(item => item.kind === 'explanation'); await settings.clearSummaryCredential(); await broadcast(); return {};
     case 'SHIYI/TEST_SUMMARY_MODEL': {
       uiOnly(sender); const connection = await settings.resolveSummaryProfile(message.profile, message.apiKey);
       assert(await connectionPermission(connection.profile), 'MODEL_PERMISSION', '请先允许访问这个总结连接。');
@@ -469,13 +540,14 @@ chrome.tabs.onUpdated.addListener((tabId, change, tab) => {
   let navigation=knowledgeNavigations.get(tabId);
   if(change.status==='loading'||change.url){if(!navigation||navigation.url!==tab.url||change.status==='loading'&&!navigation.loading){navigation={id:crypto.randomUUID(),url:tab.url,loading:true};knowledgeNavigations.set(tabId,navigation);}const token=navigation.id;ready.then(()=>knowledge.begin(tabId,{newVisit:true,tabSnapshot:tab,visitToken:token})).catch(()=>{});}
   if(change.status==='complete'||change.url&&tab.status==='complete'){if(navigation)navigation.loading=false;const token=navigation?.id;ready.then(()=>knowledge.captureTab(tabId,{visitToken:token})).catch(()=>{});}
+  if (change.url) abortRequests(item => item.tabId === tabId && item.kind === 'explanation');
   if (change.status === 'loading') { abortRequests(item => item.tabId === tabId); setBadge(tabId, false).catch(() => {}); }
   if (tab.active && (change.status === 'complete' || change.url)) ready.then(() => menus.update(tabId)).catch(() => {});
 });
 chrome.alarms.onAlarm.addListener(alarm=>ready.then(()=>alarm.name==='dianyi-knowledge-daily'?knowledge.runDue():alarm.name==='dianyi-knowledge-queue'?knowledge.pump():undefined).catch(()=>{}));
 chrome.storage.onChanged.addListener((changes,area)=>{
   const profileChanged=changes.config&&JSON.stringify(changes.config.oldValue?.modelConnections?.summary)!==JSON.stringify(changes.config.newValue?.modelConnections?.summary);
-  if(area==='local'&&profileChanged)ready.then(()=>knowledge.resume()).catch(()=>{});
+  if(area==='local'&&profileChanged){abortRequests(item=>item.kind==='explanation');ready.then(()=>knowledge.resume()).catch(()=>{});}
   // Credential saves resume from their completed API transaction, rather than
   // reacting between local/session writes and reading a half-updated Key.
 });

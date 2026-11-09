@@ -34,7 +34,7 @@ export function streamRedactor(secret, emit) {
     if (output) emit(output);
   };
 }
-export async function runSummaryModel({ profile, apiKey, text, preset, prefs, signal, onPhase = () => {}, onDelta = () => {}, onRequest=()=>{},onUsage=()=>{},fetcher = fetch }) {
+export async function runSummaryModel({ profile, apiKey, text, preset, prefs, messages, signal, onPhase = () => {}, onDelta = () => {}, onRequest=()=>{},onUsage=()=>{},fetcher = fetch }) {
   const controller = new AbortController(); let timer, timedOut = false;
   const abort = () => controller.abort();
   if (signal?.aborted) abort(); else signal?.addEventListener('abort', abort, { once: true });
@@ -63,7 +63,7 @@ export async function runSummaryModel({ profile, apiKey, text, preset, prefs, si
       if (!Object.hasOwn(SUMMARY_PRESETS, chosen) || chosen === 'auto') { chosen = 'general'; fallback = true; }
     }
     onPhase({ phase: 'streaming', chosen, topic, fallback });
-    const response = await request([{ role: 'system', content: summaryPrompt(chosen, prefs) }, { role: 'user', content: JSON.stringify({ page_content: text }) }], true);
+    const response = await request(messages || [{ role: 'system', content: summaryPrompt(chosen, prefs) }, { role: 'user', content: JSON.stringify({ page_content: text }) }], true);
     if (!response.headers.get('content-type')?.includes('text/event-stream')) throw new AppError('STREAM_UNSUPPORTED', '服务未返回流式数据，请确认该模型支持 Chat Completions 的 stream 参数。');
     let done = false, finish = '', count = 0;
     const emit = streamRedactor(apiKey, chunk => { count += chunk.length; if (count > 80000) throw new AppError('OUTPUT_LIMIT', '总结已达到 8 万字符上限，已保留现有内容。'); onDelta(chunk); });

@@ -1,6 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { SSEDecoder, streamRedactor, runSummaryModel } from '../src/lib/summary-model.js';
+import { runExplanationModel } from '../src/lib/explanation-model.js';
 import { cleanSummaryProfile, summaryPresetProfile, summaryModels, summaryPrompt, cleanSummaryPrefs } from '../src/lib/summary-presets.js';
 import { initialModelDraft, changeProvider, modelForm } from '../src/ui/model-setup.js';
 import { createContextMenus, MENU } from '../src/lib/context-menu.js';
@@ -38,6 +39,30 @@ test('manual summary uses one actual streaming fetch and preserves split UTF8', 
   await runSummaryModel({profile,apiKey:'fixture-secret',text:'原始网页资料',preset:'technical',onDelta:text=>output+=text,fetcher:async(url,options)=>{requests.push({url,options});return stream(delta('中文🙂')+delta(' sk-fixture')+event({choices:[{delta:{},finish_reason:'stop'}]})+'data: [DONE]\n\n');}});
   assert.equal(output,'中文🙂 sk-fixture');assert.equal(requests.length,1);
   const {options}=requests[0],body=JSON.parse(options.body);assert.equal(body.stream,true);assert.equal(options.headers.Authorization,'Bearer fixture-secret');assert(!options.body.includes('fixture-secret'));assert.equal(options.credentials,'omit');
+});
+test('word explanations stream one contextual request through the supplied summary connection', async () => {
+  let output = '', request;
+  const entry = { text: 'RAG', translation: '抹布', targetLanguage: 'zh-CN' };
+  await runExplanationModel({
+    profile: { ...profile, model: 'summary-fixture' }, apiKey: 'summary-secret', entry,
+    context: 'RAG retrieves documents before generation.', title: 'Search techniques',
+    onDelta: chunk => { output += chunk; },
+    fetcher: async (url, options) => {
+      assert.equal(request, undefined);
+      request = JSON.parse(options.body);
+      assert.equal(options.headers.Authorization, 'Bearer summary-secret');
+      return stream(delta('这里的 RAG 是检索增强生成。') + delta(' summary-secret') + 'data: [DONE]\n\n');
+    }
+  });
+  assert.equal(request.model, 'summary-fixture');
+  assert.equal(request.stream, true);
+  assert.deepEqual(JSON.parse(request.messages[1].content), {
+    task: 'explain', selected_text: 'RAG', current_translation: '抹布',
+    nearby_context: 'RAG retrieves documents before generation.', page_title: 'Search techniques'
+  });
+  assert(request.messages[0].content.includes('不确定') || request.messages[0].content.includes('不足以确定'));
+  assert(request.messages[0].content.includes('纯文本'));
+  assert.equal(output, '这里的 RAG 是检索增强生成。 [密钥已隐藏]');
 });
 test('auto summary classifies first then uses the selected scene and ignores reasoning deltas', async () => {
   let calls=0,output='',selected;

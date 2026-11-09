@@ -109,7 +109,7 @@ try:
             manifest = ui.evaluate('()=>chrome.runtime.getManifest()')
             assert manifest['name'] == '点译 · 翻译与网页总结' and manifest['version'] == VERSION, manifest
             db_version = ui.evaluate('()=>new Promise(resolve=>{const r=indexedDB.open("shiyi-vocabulary");r.onsuccess=()=>{resolve(r.result.version);r.result.close()}})')
-            assert db_version == 2, {'database_version': db_version, 'state_fields': list(value)}
+            assert db_version == 3, {'database_version': db_version, 'state_fields': list(value)}
             passed('Archived v0.5.1 upgrades in the same install path and profile: extension ID, glossary, model, preferences and credential remain intact; database migrates from v1 to v2')
 
             page = context.new_page(); page.on('pageerror', lambda error: report['errors'].append(str(error)))
