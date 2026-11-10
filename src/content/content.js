@@ -9,7 +9,8 @@
   const languages = { 'zh-CN': '简体中文', en: 'English', ja: '日本語', ko: '한국어', fr: 'Français', de: 'Deutsch', es: 'Español' };
   const languageNames = { 'zh-CN': '中文', en: '英语', ja: '日语', ko: '韩语', fr: '法语', de: '德语', es: '西班牙语' };
   let enabled = false, prefs = {}, entries = new Map(), trie = Text.compile([]), snapshot = '', refreshVersion = 0;
-  let events, observer, host, shadow, panel, toastNode, closeTimer, toastTimer, currentRequest, explanationRequest, lastSelection, keyboardAnchor, suppressFocus = false;
+  let events, observer, host, shadow, panel, toastNode, closeTimer, toastTimer, currentRequest, explanationRequest, speechRequest, lastSelection, keyboardAnchor, suppressFocus = false;
+  const pronunciationRequests = new Map();
   let scanRoots = new Set(), idleHandle, scanGeneration = 0, dragging = false;
   let readerBar, readerRevision = '', readerLayout = 'auto', longEntries = new Map(), contextSelection, menuReading = false;
   let petVisible = false, petOpen = false, petPosition = {}, modelConfigured = false, summaryConfigured = false, pageRestoreKey = '', lastDocumentURL = '', routeWatch;
@@ -92,6 +93,7 @@
 .meaning-row{display:flex;align-items:flex-start;gap:8px}.meaning-row .meaning{flex:1;min-width:0}
 .copy-translation{flex:none;padding:4px 0;font-size:11px;color:#657268;border-radius:4px}
 .source-text{font-size:12px;font-weight:400;line-height:1.6;color:#657268;margin:8px 0 0;white-space:pre-wrap;overflow-wrap:anywhere;max-height:96px;overflow:auto;scrollbar-width:thin}
+.pronunciation .card-actions{gap:8px;flex-wrap:wrap}
 .explanation-toggle{display:flex;align-items:center;gap:4px;padding:5px 0;margin-top:7px;font-size:12px;color:#006665;border-radius:4px}
 .explanation-toggle svg{width:12px;height:12px;transition:transform .15s}
 .explanation-toggle[aria-expanded=true] svg{transform:rotate(180deg)}
@@ -101,7 +103,7 @@
 .explanation-status{font-size:11px;color:#657268;min-width:0;overflow-wrap:anywhere}
 .explanation-controls{display:flex;align-items:center;justify-content:flex-end;gap:8px;flex-wrap:wrap;flex-shrink:0;max-width:55%}
 .explanation-controls button{font-size:11px;padding:3px;color:#506459}
-.explanation-body{font-size:13px;line-height:1.85;white-space:pre-wrap;overflow-wrap:anywhere;color:#30493d}
+.explanation-body,.pronunciation-notes{font-size:13px;line-height:1.85;white-space:pre-wrap;overflow-wrap:anywhere;color:var(--li-color-on-light-800,#30493d)}
 .explanation-error{font-size:12px;color:#9a3932;margin:8px 0 0;line-height:1.7}
 .meta{font-size:11px;color:#657268}
 .foot{padding:5px 8px 5px 16px;border-top:1px solid #e8ede7;display:flex;align-items:center;justify-content:space-between;gap:8px}
@@ -194,15 +196,25 @@
     send('CANCEL', { requestId: current.id }).catch(() => {});
     current.stopped();
   }
+  function stopPronunciation() {
+    for (const request of pronunciationRequests.values()) send('CANCEL', { requestId: request.id }).catch(() => {});
+    pronunciationRequests.clear();
+  }
+  function stopSpeech() {
+    const current = speechRequest; speechRequest = null;
+    if (current?.utterance) window.speechSynthesis?.cancel();
+    current?.reset();
+  }
   function hidePanel() {
     clearTimeout(closeTimer);
+    stopSpeech();
     if (explanationRequest?.background) explanationRequest = null;
     else stopExplanation();
     panel?.remove(); panel = null;
   }
   function scheduleHide() {
     clearTimeout(closeTimer);
-    closeTimer = setTimeout(() => { if (!panel?.dataset.explanationPinned && !panel?.contains(shadow?.activeElement) && !currentRequest) hidePanel(); }, 230);
+    closeTimer = setTimeout(() => { if (!panel?.dataset.explanationPinned && !panel?.dataset.pronunciationPinned && !panel?.contains(shadow?.activeElement) && !currentRequest) hidePanel(); }, 230);
   }
   function position(node, rect) {
     const pad = 12, width = node.offsetWidth, height = node.offsetHeight;
@@ -231,6 +243,102 @@
     const full = contextText(owner);
     const index = owner === anchor ? full.indexOf(text) : contextText(owner, anchor).length;
     return full.slice(Math.max(0, index - 180), Math.max(0, index) + text.length + 180).trim().slice(0, 1200);
+  }
+  async function localSpeechVoice(language) {
+    const service = window.speechSynthesis;
+    if (!service || !window.SpeechSynthesisUtterance) return null;
+    const find = () => service.getVoices().find(voice => voice.localService && voice.lang.replace(/_/g, '-').toLowerCase().startsWith(language.toLowerCase()));
+    const voice = find(); if (voice) return voice;
+    return new Promise(resolve => {
+      const finish = () => { clearTimeout(timer); service.removeEventListener('voiceschanged', finish); resolve(find() || null); };
+      const timer = setTimeout(finish, 1200);
+      service.addEventListener('voiceschanged', finish);
+    });
+  }
+  function addPronunciation(node, entry, context, rect) {
+    if (entry.text.length > 120 || !/^[a-z][a-z\s.'’\-]*$/i.test(entry.text) || entry.text.trim().split(/\s+/).length > 8) return;
+    const root = el('div', { class: 'pronunciation', 'data-pronunciation': '', 'aria-label': '英语读音' });
+    const ipa = el('div', { class: 'source-text', 'aria-label': '国际音标', role: 'status', 'aria-live': 'polite' });
+    const details = el('div', { class: 'pronunciation-notes', id: `shiyi-pronunciation-${crypto.randomUUID()}`, hidden: true });
+    const notice = el('p', { class: 'hint error', role: 'alert', hidden: true });
+    const setup = button('配置总结模型', () => send('OPEN_OPTIONS', { section: 'model-summary' }).catch(error => showToast(error.message)), 'copy-translation');
+    setup.hidden = true;
+    let value, busy = false;
+    const reposition = () => { if (panel === node) position(node, rect); };
+    const report = message => { notice.textContent = message; notice.hidden = false; reposition(); };
+    const copy = copyButton('复制读音', () => [entry.text, root.dataset.copyText].filter(Boolean).join('\n'), 'copy-translation'); copy.hidden = true;
+    const retry = button('重试读音', load, 'copy-translation'); retry.hidden = true;
+    const toggle = button('发音说明', () => {
+      details.hidden = !details.hidden;
+      toggle.setAttribute('aria-expanded', String(!details.hidden));
+      if (details.hidden) delete node.dataset.pronunciationPinned;
+      else node.dataset.pronunciationPinned = 'true';
+      reposition();
+    }, 'copy-translation');
+    toggle.hidden = true;
+    toggle.setAttribute('aria-expanded', 'false'); toggle.setAttribute('aria-controls', details.id);
+    function render(result) {
+      value = result; setup.hidden = true; notice.hidden = true;
+      if (value.available) {
+        ipa.textContent = [value.british && `英 ${value.british}`, value.american && `美 ${value.american}`].filter(Boolean).join('\n');
+        ipa.hidden = false;
+        details.textContent = [value.syllables && `音节划分 ${value.syllables}`, value.explanation, value.source === 'dictionary' ? '本地词典 · IPA Dict / CMUdict' : '模型生成的读音参考'].filter(Boolean).join('\n');
+        root.dataset.copyText = [ipa.textContent, details.textContent].join('\n'); copy.hidden = false;
+        toggle.hidden = false;
+      } else { ipa.textContent = value.reason; details.textContent = ''; toggle.hidden = true; }
+      reposition();
+    }
+    function listen(language, label) {
+      const control = button(label, async () => {
+        if (speechRequest?.control === control) { stopSpeech(); return; }
+        stopSpeech(); notice.hidden = true; node.dataset.pronunciationPinned = 'true';
+        const request = { control, reset: () => { control.textContent = label; if (details.hidden) delete node.dataset.pronunciationPinned; } };
+        speechRequest = request; control.textContent = '准备朗读…';
+        try {
+          const voice = await localSpeechVoice(language);
+          if (speechRequest !== request || panel !== node) return;
+          if (!voice) { stopSpeech(); report(`本机暂无${language === 'en-GB' ? '英式' : '美式'}英语语音，可在系统设置中添加后再试。`); return; }
+          const utterance = new SpeechSynthesisUtterance(entry.text);
+          request.utterance = utterance; utterance.lang = language; utterance.voice = voice; utterance.rate = .9;
+          utterance.onend = () => { if (speechRequest === request) { speechRequest = null; request.reset(); } };
+          utterance.onerror = event => { if (speechRequest === request) { speechRequest = null; request.reset(); if (!['canceled', 'interrupted'].includes(event.error)) report('朗读未完成，请重试或检查本机语音设置。'); } };
+          control.textContent = '停止朗读'; window.speechSynthesis.speak(utterance);
+        } catch { if (speechRequest === request) { stopSpeech(); report('当前浏览器暂时无法朗读，请检查本机语音设置。'); } }
+      }, 'copy-translation');
+      control.setAttribute('aria-label', label); return control;
+    }
+    root.append(ipa, el('div', { class: 'card-actions' }, listen('en-GB', '听英音'), listen('en-US', '听美音'), toggle, copy, retry), details, notice, setup);
+    node.querySelector('.inside > .source-text').after(root);
+    const payload = { entryId: entry.id, context };
+    load();
+    async function load() {
+      if (busy || panel !== node) return;
+      busy = true; notice.hidden = true; setup.hidden = true; retry.hidden = true;
+      ipa.hidden = false; ipa.textContent = '正在加载音标…'; root.setAttribute('aria-busy', 'true');
+      const url = location.href, key = JSON.stringify([url, entry.id, context]);
+      try {
+        // A hidden card must not discard a paid lookup. Reopening the same
+        // occurrence joins its pending request; completion persists in IndexedDB.
+        let request = pronunciationRequests.get(key);
+        if (!request) {
+          request = { id: crypto.randomUUID() };
+          request.result = send('PRONUNCIATION', { ...payload, requestId: request.id }).finally(() => {
+            if (pronunciationRequests.get(key) === request) pronunciationRequests.delete(key);
+          });
+          pronunciationRequests.set(key, request);
+        }
+        const result = await request.result;
+        if (panel !== node || location.href !== url || !enabled) return;
+        render(result.pronunciation);
+        if (result.saved === false) report('本次读音已生成，本地保存未完成。');
+      } catch (error) {
+        if (panel !== node || location.href !== url || !enabled) return;
+        ipa.hidden = true; report(error.message); retry.hidden = false;
+        setup.hidden = !['SUMMARY_NOT_CONFIGURED', 'MISSING_KEY', 'MODEL_PERMISSION', 'HTTP_401', 'HTTP_403', 'CODEX_UNAVAILABLE', 'CODEX_PERMISSION', 'CODEX_AUTH'].includes(error.code);
+      } finally {
+        busy = false; root.setAttribute('aria-busy', 'false'); reposition();
+      }
+    }
   }
   function addExplanation(node, entry, context, rect, automatic = false) {
     const body = el('div', { class: 'explanation-body' });
@@ -301,7 +409,9 @@
     inside.prepend(el('div', { class: 'meaning-row' },
       el('div', { class: 'meaning', lang: entry.targetLanguage }, entry.translation), copyButton('复制译文', () => entry.translation, 'copy-translation')),
       el('div', { class: 'source-text', lang: entry.sourceLanguage || 'und', 'aria-label': '原文' }, entry.text));
-    if (!node.querySelector('.explanation')) addExplanation(node, entry, context ?? nearbyContext(anchor, entry.text), rect, options.automatic);
+    const nearby = context ?? nearbyContext(anchor, entry.text);
+    if (!node.querySelector('[data-pronunciation]')) addPronunciation(node, entry, nearby, rect);
+    if (!node.querySelector('.explanation')) addExplanation(node, entry, nearby, rect, options.automatic);
     node.querySelector('.foot')?.remove();
     const remove = button('删除', async () => {
       try { const result = await send('DELETE', { id: entry.id }); hidePanel(); await refresh(); showToast(`已删除 ${result.removed} 个词句并移除对应标记`, result.token); }
@@ -311,7 +421,7 @@
     const edit = button('编辑', () => send('OPEN_OPTIONS', { section: 'library', entryId: entry.id }).catch(error => showToast(error.message)), '', 'edit');
     node.append(el('div', { class: 'foot' },
       el('span', { class: 'meta', title: `${languages[entry.targetLanguage] || entry.targetLanguage} · 本地词库` }, '已存释义'),
-      el('div', { class: 'card-actions' }, copyButton('复制全部', () => [entry.text, entry.translation, node.querySelector('.explanation-body')?.textContent].filter(Boolean).join('\n\n')), edit, remove)));
+      el('div', { class: 'card-actions' }, copyButton('复制全部', () => [entry.text, entry.translation, node.querySelector('[data-pronunciation]')?.dataset.copyText, node.querySelector('.explanation .explanation-body')?.textContent].filter(Boolean).join('\n\n')), edit, remove)));
     node.addEventListener('pointerleave', scheduleHide); position(node, rect); if (keyboard) node.focus({ preventScroll: true });
   }
   function showTool(selection) {
@@ -722,7 +832,7 @@
       if (!currentRequest) hidePanel();
       if (readerBar?.isConnected) Companion.place(readerBar, petPosition);
     }, { signal: events.signal });
-    window.addEventListener('pagehide', () => { reader.stop(); stopExplanation(); if (currentRequest) send('CANCEL', { requestId: currentRequest.id }).catch(() => {}); }, { signal: events.signal });
+    window.addEventListener('pagehide', () => { reader.stop(); stopExplanation(); stopPronunciation(); stopSpeech(); if (currentRequest) send('CANCEL', { requestId: currentRequest.id }).catch(() => {}); }, { signal: events.signal });
     observer = new MutationObserver(records => {
       for (const record of records) {
         const element = record.target.nodeType === Node.TEXT_NODE ? record.target.parentElement : record.target;
@@ -736,6 +846,7 @@
   }
   function deactivate() {
     enabled = false; events?.abort(); observer?.disconnect(); scanGeneration++; clearInterval(routeWatch); petVisible = false; petOpen = false; petPosition = {}; pageRestoreKey = ''; lastDocumentURL = '';
+    stopPronunciation();
     reader.restore();
     if (idleHandle) cancelIdle(idleHandle); idleHandle = null; scanRoots.clear();
     currentRequest = null; contextSelection = null; dragging = false; clearAnnotations(); hidePanel();
@@ -756,7 +867,7 @@
       send('CANCEL', { requestId: currentRequest.id }).catch(() => {});
       currentRequest = null;
     }
-    if (routeChanged) { petVisible = false; petOpen = false; petPosition = {}; }
+    if (routeChanged) { stopPronunciation(); petVisible = false; petOpen = false; petPosition = {}; }
     if (reader.status().active && (routeChanged || readerRevision !== state.translationSignature)) { reader.restore(); if (!routeChanged) showToast('翻译设置已更改，已恢复原文；请重新翻译页面。'); }
     lastDocumentURL = location.href; modelConfigured = state.modelConfigured;
     readerRevision = state.translationSignature;

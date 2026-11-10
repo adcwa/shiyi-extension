@@ -1,0 +1,9 @@
+{
+  "source": "https://raw.githubusercontent.com/open-dict-data/ipa-dict/972cd67dd5f96bc5660e28070cde26e3928abcd7/data/en_US.txt",
+  "sha256": "2af6f154a5c363275f052d1f85acedef38ed185ca9745aa4314be77f6b70de67",
+  "dialect": "en-US",
+  "entries": 125912,
+  "format": "word-to-ipa-v1",
+  "shards": 26,
+  "corrections": "Leading stress in the engineer family corrected to secondary; see build-pronunciation.mjs."
+}

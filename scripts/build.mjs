@@ -50,18 +50,26 @@ async function filesUnder(directory) {
   return out.sort();
 }
 // ZIP is generated without downloading a build tool or bundling test fixtures.
-const locals = [], central = []; let offset = 0;
 const archiveDate = ((2026 - 1980) << 9) | (11 << 5) | 3;
 const files = await filesUnder(destination);
-for (const full of files) {
-  const filename = path.relative(destination, full).split(path.sep).join('/'), name = Buffer.from(filename), raw = await fs.readFile(full), packed = deflateRawSync(raw), checksum = crc(raw);
-  const header = Buffer.alloc(30); header.writeUInt32LE(0x04034b50); header.writeUInt16LE(20, 4); header.writeUInt16LE(0x800, 6); header.writeUInt16LE(8, 8); header.writeUInt16LE(archiveDate, 12); header.writeUInt32LE(checksum, 14); header.writeUInt32LE(packed.length, 18); header.writeUInt32LE(raw.length, 22); header.writeUInt16LE(name.length, 26);
-  locals.push(header, name, packed);
-  const record = Buffer.alloc(46); record.writeUInt32LE(0x02014b50); record.writeUInt16LE((3 << 8) | 20, 4); record.writeUInt16LE(20, 6); record.writeUInt16LE(0x800, 8); record.writeUInt16LE(8, 10); record.writeUInt16LE(archiveDate, 14); record.writeUInt32LE(checksum, 16); record.writeUInt32LE(packed.length, 20); record.writeUInt32LE(raw.length, 24); record.writeUInt16LE(name.length, 28); record.writeUInt32LE(((await fs.stat(full)).mode << 16) >>> 0, 38); record.writeUInt32LE(offset, 42); central.push(record, name);
-  offset += header.length + name.length + packed.length;
+async function packageFiles(rewrite = (_name, bytes) => bytes) {
+  const locals = [], central = []; let offset = 0;
+  for (const full of files) {
+    const filename = path.relative(destination, full).split(path.sep).join('/'), name = Buffer.from(filename), raw = rewrite(filename, await fs.readFile(full)), packed = deflateRawSync(raw), checksum = crc(raw);
+    const header = Buffer.alloc(30); header.writeUInt32LE(0x04034b50); header.writeUInt16LE(20, 4); header.writeUInt16LE(0x800, 6); header.writeUInt16LE(8, 8); header.writeUInt16LE(archiveDate, 12); header.writeUInt32LE(checksum, 14); header.writeUInt32LE(packed.length, 18); header.writeUInt32LE(raw.length, 22); header.writeUInt16LE(name.length, 26);
+    locals.push(header, name, packed);
+    const record = Buffer.alloc(46); record.writeUInt32LE(0x02014b50); record.writeUInt16LE((3 << 8) | 20, 4); record.writeUInt16LE(20, 6); record.writeUInt16LE(0x800, 8); record.writeUInt16LE(8, 10); record.writeUInt16LE(archiveDate, 14); record.writeUInt32LE(checksum, 16); record.writeUInt32LE(packed.length, 20); record.writeUInt32LE(raw.length, 24); record.writeUInt16LE(name.length, 28); record.writeUInt32LE(((await fs.stat(full)).mode << 16) >>> 0, 38); record.writeUInt32LE(offset, 42); central.push(record, name);
+    offset += header.length + name.length + packed.length;
+  }
+  const centralData = Buffer.concat(central), end = Buffer.alloc(22); end.writeUInt32LE(0x06054b50); end.writeUInt16LE(files.length, 8); end.writeUInt16LE(files.length, 10); end.writeUInt32LE(centralData.length, 12); end.writeUInt32LE(offset, 16);
+  return Buffer.concat([...locals, centralData, end]);
 }
-const centralData = Buffer.concat(central), end = Buffer.alloc(22); end.writeUInt32LE(0x06054b50); end.writeUInt16LE(files.length, 8); end.writeUInt16LE(files.length, 10); end.writeUInt32LE(centralData.length, 12); end.writeUInt32LE(offset, 16);
-const zip = path.join(root, 'releases', `dianyi-chrome-edge-${pkg.version}.zip`); await fs.writeFile(zip, Buffer.concat([...locals, centralData, end]));
+const zip = path.join(root, 'releases', `dianyi-chrome-edge-${pkg.version}.zip`); await fs.writeFile(zip, await packageFiles());
+// Store identities are assigned by the existing Web Store item. The public key
+// is exclusively for stable unpacked installs and must not be uploaded there.
+const storeManifest = { ...manifest }; delete storeManifest.key;
+const storeZip = path.join(root, 'releases', `dianyi-chrome-web-store-${pkg.version}.zip`);
+await fs.writeFile(storeZip, await packageFiles((name, bytes) => name === 'manifest.json' ? Buffer.from(JSON.stringify(storeManifest, null, 2) + '\n') : bytes));
 // Keep the legacy unpacked path as an install/test compatibility alias.
 await fs.cp(destination, path.join(root, 'releases', `shiyi-${pkg.version}`), { recursive: true });
 // Existing keyless installations must retain their original path-derived ID.
@@ -71,4 +79,4 @@ let previous = null;
 try { previous = JSON.parse(await fs.readFile(path.join(fixed, 'manifest.json'), 'utf8')); } catch(error) { if(error.code!=='ENOENT')throw error; }
 await fs.cp(destination, fixed, { recursive: true });
 if(previous){const retained={...manifest};if(previous.key)retained.key=previous.key;else delete retained.key;await fs.writeFile(path.join(fixed,'manifest.json'),JSON.stringify(retained,null,2)+'\n');}
-console.log(`Built ${files.length} production files\nUnpacked: ${destination}\nPackage: ${zip}`);
+console.log(`Built ${files.length} production files\nUnpacked: ${destination}\nPackage: ${zip}\nChrome Web Store: ${storeZip}`);

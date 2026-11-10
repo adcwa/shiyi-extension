@@ -32,6 +32,13 @@ class Handler(BaseHTTPRequestHandler):
     def do_POST(self):
         payload = json.loads(self.rfile.read(int(self.headers['Content-Length'])))
         data = json.loads(payload['messages'][-1]['content'])
+        if data.get('task') == 'pronunciation':
+            self.send_response(200)
+            self.send_header('Content-Type', 'text/event-stream')
+            self.end_headers()
+            content = json.dumps({'available': False, 'reason': '此测试词的读音暂不确定。'})
+            self.wfile.write(('data: ' + json.dumps({'choices': [{'delta': {'content': content}}]}) + '\n\ndata: [DONE]\n\n').encode())
+            return
         with lock:
             mode = control['mode']
             version = control['version']
@@ -111,7 +118,7 @@ try:
             root.get_by_role('button', name='展开更多', exact=True).evaluate('button=>button.click()')
             expect(root.get_by_role('button', name='展开更多', exact=True)).to_have_attribute('aria-expanded', 'false')
             root.get_by_role('button', name='展开更多', exact=True).click()
-            expect(root.get_by_role('button', name='配置总结模型', exact=True)).to_be_visible()
+            expect(root.locator('.explanation').get_by_role('button', name='配置总结模型', exact=True)).to_be_visible()
             expect(root.locator('.meaning')).to_have_text('抹布')
             assert len(calls) == 1
             summary = {**profile, 'name': 'Summary fixture', 'model': 'summary-fixture'}
@@ -180,7 +187,7 @@ try:
             assert len(message('LIBRARY')['entries']) == 1
             control['mode'] = '401'
             root.get_by_role('button', name='重试', exact=True).click()
-            expect(root.get_by_role('button', name='配置总结模型', exact=True)).to_be_visible()
+            expect(root.locator('.explanation').get_by_role('button', name='配置总结模型', exact=True)).to_be_visible()
             expect(root.locator('.meaning')).to_have_text('抹布')
             root.get_by_role('button', name='关闭释义', exact=True).click()
             before = len(calls)

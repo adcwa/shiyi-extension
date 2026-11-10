@@ -13,6 +13,8 @@ import { createKnowledgeManager } from './lib/knowledge-manager.js';
 import { cleanSummaryProfile } from './lib/summary-presets.js';
 import { runSummaryModel } from './lib/summary-model.js';
 import { explanationIdentity, selectionExplanationIdentity, runExplanationModel } from './lib/explanation-model.js';
+import { supportsPronunciation, pronunciationIdentity, parsePronunciation, runPronunciationModel } from './lib/pronunciation-model.js';
+import { lookupPronunciation } from './lib/pronunciation-dictionary.js';
 import { runConnections } from './lib/connections.js';
 import { connectionPermission, nativeCodex } from './lib/codex.js';
 import { createVocabularyBackup, cleanVocabularyImport } from './lib/vocabulary-backup.js';
@@ -187,6 +189,45 @@ async function handle(message, sender) {
       const tabs = await chrome.tabs.query({});
       await Promise.allSettled(tabs.map(tab => chrome.tabs.sendMessage(tab.id, { type: 'SHIYI/PAGE_CACHE_CLEARED' }, { frameId: 0 })));
       await broadcast(); return output;
+    }
+    case 'SHIYI/PRONUNCIATION_CACHE':
+    case 'SHIYI/PRONUNCIATION': {
+      assert(sender.id === chrome.runtime.id && Number.isInteger(sender.tab?.id) && sender.frameId === 0 && sender.documentId, 'FORBIDDEN', '请从网页释义卡片查看读音。');
+      const requestId = boundedText(message.requestId, 80, '请求标识'), entryId = boundedText(message.entryId, 80, '词句标识');
+      const context = boundedText(message.context || '', 1200, '附近语境', { optional: true });
+      const identity = `${sender.tab.id}:${sender.documentId}:${requestId}`, controller = new AbortController();
+      assert(!pending.has(identity), 'BUSY', '读音正在查询，请稍候。');
+      pending.set(identity, { controller, tabId: sender.tab.id, documentId: sender.documentId, origin: pageOrigin(sender.url), kind: 'pronunciation' });
+      const heartbeat = setInterval(() => chrome.runtime.getPlatformInfo().catch(() => {}), 20000);
+      try {
+        const value = await requireContent(sender), entry = await store.getEntry(entryId), tab = await chrome.tabs.get(sender.tab.id);
+        assert(entry && supportsPronunciation(entry.text), 'INVALID_INPUT', '读音说明适用于英文单词和简短短语。');
+        assert(!controller.signal.aborted && tab.url === sender.url, 'CANCELLED', '页面已切换，读音查询已停止。');
+        const cacheId = await pronunciationIdentity(tab.url, entry, context), cached = await store.explanationRead(cacheId);
+        let cachedPronunciation;
+        if (cached) {
+          try {
+            cachedPronunciation = parsePronunciation(cached.text);
+            if (cachedPronunciation.available) return { pronunciation: cachedPronunciation, reused: true, saved: true };
+          }
+          catch { /* Ignore malformed old results before consulting the dictionary. */ }
+        }
+        const local = await lookupPronunciation(entry.text);
+        assert(!controller.signal.aborted, 'CANCELLED', '读音查询已停止。');
+        if (local) return { pronunciation: local, reused: true, saved: true };
+        if (cachedPronunciation) return { pronunciation: cachedPronunciation, reused: true, saved: true };
+        if (message.type === 'SHIYI/PRONUNCIATION_CACHE') return { pronunciation: null };
+        if (!value.summaryConfigured) return { pronunciation: { available: false, reason: '本地词典暂无该词句的音标，仍可使用英音或美音试听。' } };
+        const revision = await store.explanationOpen(cacheId, entry);
+        const connected = await runConnections({ value, purpose: 'summary', signal: controller.signal,
+          resolve: profile => resolveConnection(profile, 'summary'),
+          run: connection => runPronunciationModel({ ...connection, entry, context, signal: controller.signal })
+        });
+        const latest = await chrome.tabs.get(sender.tab.id);
+        assert(!controller.signal.aborted && latest.url === sender.url && await enabledSender(sender, await settings.config()), 'CANCELLED', '读音查询已停止。');
+        const saved = await store.explanationWrite(cacheId, revision, entry, { text: JSON.stringify(connected.output), modelName: connected.profile.name || connected.profile.model }).catch(() => false);
+        return { pronunciation: connected.output, reused: false, saved };
+      } finally { clearInterval(heartbeat); pending.delete(identity); }
     }
     case 'SHIYI/EXPLAIN': {
       assert(sender.id === chrome.runtime.id && Number.isInteger(sender.tab?.id) && sender.frameId === 0 && sender.documentId, 'FORBIDDEN', '请从网页中的词句释义展开。');
@@ -480,7 +521,7 @@ async function handle(message, sender) {
       summaries.cancelAll('总结模型已变更，旧任务已停止。');
       const output = await settings.saveSummaryProfile(profile, message.apiKey, { ...(Object.hasOwn(message, 'connectionId') ? { id: message.connectionId } : {}), makeDefault: message.makeDefault === true }); await knowledge.resume(); await broadcast(); return output;
     }
-    case 'SHIYI/CLEAR_SUMMARY_KEY': uiOnly(sender); summaries.cancelAll('总结密钥已清除，生成已停止。'); abortRequests(item => item.kind === 'explanation'); await settings.clearSummaryCredential(); await broadcast(); return {};
+    case 'SHIYI/CLEAR_SUMMARY_KEY': uiOnly(sender); summaries.cancelAll('总结密钥已清除，生成已停止。'); abortRequests(item => ['explanation', 'pronunciation'].includes(item.kind)); await settings.clearSummaryCredential(); await broadcast(); return {};
     case 'SHIYI/TEST_SUMMARY_MODEL': {
       uiOnly(sender); const connection = await settings.resolveSummaryProfile(message.profile, message.apiKey);
       assert(await connectionPermission(connection.profile), 'MODEL_PERMISSION', '请先允许访问这个总结连接。');
@@ -540,14 +581,14 @@ chrome.tabs.onUpdated.addListener((tabId, change, tab) => {
   let navigation=knowledgeNavigations.get(tabId);
   if(change.status==='loading'||change.url){if(!navigation||navigation.url!==tab.url||change.status==='loading'&&!navigation.loading){navigation={id:crypto.randomUUID(),url:tab.url,loading:true};knowledgeNavigations.set(tabId,navigation);}const token=navigation.id;ready.then(()=>knowledge.begin(tabId,{newVisit:true,tabSnapshot:tab,visitToken:token})).catch(()=>{});}
   if(change.status==='complete'||change.url&&tab.status==='complete'){if(navigation)navigation.loading=false;const token=navigation?.id;ready.then(()=>knowledge.captureTab(tabId,{visitToken:token})).catch(()=>{});}
-  if (change.url) abortRequests(item => item.tabId === tabId && item.kind === 'explanation');
+  if (change.url) abortRequests(item => item.tabId === tabId && ['explanation', 'pronunciation'].includes(item.kind));
   if (change.status === 'loading') { abortRequests(item => item.tabId === tabId); setBadge(tabId, false).catch(() => {}); }
   if (tab.active && (change.status === 'complete' || change.url)) ready.then(() => menus.update(tabId)).catch(() => {});
 });
 chrome.alarms.onAlarm.addListener(alarm=>ready.then(()=>alarm.name==='dianyi-knowledge-daily'?knowledge.runDue():alarm.name==='dianyi-knowledge-queue'?knowledge.pump():undefined).catch(()=>{}));
 chrome.storage.onChanged.addListener((changes,area)=>{
   const profileChanged=changes.config&&JSON.stringify(changes.config.oldValue?.modelConnections?.summary)!==JSON.stringify(changes.config.newValue?.modelConnections?.summary);
-  if(area==='local'&&profileChanged){abortRequests(item=>item.kind==='explanation');ready.then(()=>knowledge.resume()).catch(()=>{});}
+  if(area==='local'&&profileChanged){abortRequests(item=>['explanation','pronunciation'].includes(item.kind));ready.then(()=>knowledge.resume()).catch(()=>{});}
   // Credential saves resume from their completed API transaction, rather than
   // reacting between local/session writes and reading a half-updated Key.
 });
